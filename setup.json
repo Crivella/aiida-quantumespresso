@@ -12,6 +12,7 @@
     "description": "The official AiiDA plugin for Quantum ESPRESSO",
     "entry_points": {
         "aiida.calculations": [
+            "quantumespresso.bandsx = aiida_quantumespresso.calculations.bandsx:BandsxCalculation",
             "quantumespresso.cp = aiida_quantumespresso.calculations.cp:CpCalculation",
             "quantumespresso.create_kpoints_from_distance = aiida_quantumespresso.calculations.functions.create_kpoints_from_distance:create_kpoints_from_distance",
             "quantumespresso.dos = aiida_quantumespresso.calculations.dos:DosCalculation",
@@ -33,6 +34,7 @@
             "quantumespresso.force_constants = aiida_quantumespresso.data.force_constants:ForceConstantsData"
         ],
         "aiida.parsers": [
+            "quantumespresso.bandsx = aiida_quantumespresso.parsers.bandsx:BandsxParser",
             "quantumespresso.cp = aiida_quantumespresso.parsers.cp:CpParser",
             "quantumespresso.dos = aiida_quantumespresso.parsers.dos:DosParser",
             "quantumespresso.matdyn = aiida_quantumespresso.parsers.matdyn:MatdynParser",
