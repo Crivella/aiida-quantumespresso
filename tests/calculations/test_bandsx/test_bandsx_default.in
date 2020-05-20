@@ -1,0 +1,9 @@
+&BANDS
+  filband = 'filband'
+  filp = 'm_elems'
+  lsigma = .false.
+  lsym = .false.
+  outdir = './out/'
+  parity = .true.
+  prefix = 'aiida'
+/
