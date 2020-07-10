@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`CalcJob` implementation for the pw2gw.x code of Quantum ESPRESSO."""
+"""`CalcJob` implementation for the bands.x code of Quantum ESPRESSO."""
 from __future__ import absolute_import
 
 import os
@@ -10,7 +10,7 @@ from aiida_quantumespresso.calculations.namelists import NamelistsCalculation
 
 
 class BandsxCalculation(NamelistsCalculation):
-    """`CalcJob` implementation for the pw2gw.x code of Quantum ESPRESSO."""
+    """`CalcJob` implementation for the bands.x code of Quantum ESPRESSO."""
 
     _INPUT_PSEUDOFOLDER = './pseudo/'
 
@@ -35,6 +35,7 @@ class BandsxCalculation(NamelistsCalculation):
 
     @classmethod
     def define(cls, spec):
+        """Define the process specification."""
         # yapf: disable
         super(BandsxCalculation, cls).define(spec)
         spec.input('parent_folder', valid_type=orm.RemoteData,
