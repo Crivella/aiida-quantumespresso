@@ -97,7 +97,7 @@ class BandsxParser(Parser):
         return filband
 
     def parse_stdout(self):
-        """Parse the stdout file of pw2gw to build the `output_parameters` node."""
+        """Parse the stdout file of bands.x to build the `output_parameters` node."""
         from aiida_quantumespresso.utils.mapping import get_logging_container
         from aiida_quantumespresso.parsers.parse_raw.bandsx import parse_stdout
 

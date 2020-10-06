@@ -47,6 +47,11 @@ def parse_stdout(stdout):
     return parsed_data, logs
 
 def parse_filband_file(content):
+    """Parses the file produced by  of a Quantum ESPRESSO `bands.x` calculation.
+
+    :param content: the content of the file as a string
+    :returns: tuple containing a dictionary with the parsed data,  the logging container
+    """
     data_lines = content.split('\n')
 
     logs = get_logging_container()
@@ -54,7 +59,7 @@ def parse_filband_file(content):
     parsed_data = {}
 
 
-    res = re.finditer(r'nbnd(_\w*)? *= *(?P<nbnd>\d*) *, *nks(_\w*)? *= *(?P<nks>\d*)', data_lines[0])
+    res = re.finditer(r'nbnd(_\w*)?\s*=\s*(?P<nbnd>\d*)\s*,\s*nks(_\w*)?\s*=\s*(?P<nks>\d*)', data_lines[0])
     dct = list(res)[0].groupdict()
     nbnd = int(dct['nbnd'])
     nks  = int(dct['nks'])
@@ -64,19 +69,19 @@ def parse_filband_file(content):
     app1 = app1.replace('T', ' ').replace('F', ' ')
     data = list(map(lambda x: float(x), filter(None, app1.split(' '))))
 
-    a = nbnd + 3
+    block_length = nbnd + 3
     kpts = []
     res = []
     for i in range(nks):
         # print(i)
         new_kpt = []
         for j in range(3):
-            new_kpt.append(data[a*i + j])
+            new_kpt.append(data[block_length*i + j])
         kpts.append(new_kpt)
 
         new_res = []
         for j in range(nbnd):
-            new_res.append(data[a*i + j + 3])
+            new_res.append(data[block_length*i + j + 3])
         res.append(new_res)
 
     parsed_data['kpts'] = np.array(kpts)
