@@ -25,7 +25,19 @@ def validate_protocol(protocol_dict, ctx=None):  # pylint: disable=unused-argume
 
 
 class PwBandStructureWorkChain(WorkChain):
-    """Workchain to automatically compute a band structure for a given structure using Quantum ESPRESSO pw.x."""
+    """Workchain to automatically compute a band structure for a given structure using Quantum ESPRESSO pw.x.
+
+    .. deprecated:: 4.0.0
+        This work chain has been replaced by the ``PwBandsWorkchain``.
+    """
+
+    import warnings
+    from aiida.common.warnings import AiidaDeprecationWarning
+
+    warnings.warn(
+        'The `PwBandStructureWorkChain` has been deprecated in favor of the `PwBandsWorkChain` and will be '
+        'removed in `v4.0.0`', AiidaDeprecationWarning
+    )
 
     @classmethod
     def define(cls, spec):
@@ -56,6 +68,7 @@ class PwBandStructureWorkChain(WorkChain):
         spec.output('scf_parameters', valid_type=orm.Dict)
         spec.output('band_parameters', valid_type=orm.Dict)
         spec.output('band_structure', valid_type=orm.BandsData)
+        # yapf: enable
 
     def _get_protocol(self):
         """Return a `ProtocolManager` instance and a dictionary of modifiers."""
@@ -92,32 +105,36 @@ class PwBandStructureWorkChain(WorkChain):
                 self.report(f'failed to retrieve the cutoff or dual factor for {kind}')
                 return self.exit_codes.ERROR_INVALID_INPUT_UNRECOGNIZED_KIND
 
-        self.ctx.parameters = orm.Dict(dict={
-            'CONTROL': {
-                'restart_mode': 'from_scratch',
-                'tstress': self.ctx.protocol['tstress'],
-                'tprnfor': self.ctx.protocol['tprnfor'],
-            },
-            'SYSTEM': {
-                'ecutwfc': max(ecutwfc),
-                'ecutrho': max(ecutrho),
-                'smearing': self.ctx.protocol['smearing'],
-                'degauss': self.ctx.protocol['degauss'],
-                'occupations': self.ctx.protocol['occupations'],
-            },
-            'ELECTRONS': {
-                'conv_thr': self.ctx.protocol['convergence_threshold_per_atom'] * len(self.inputs.structure.sites),
+        self.ctx.parameters = orm.Dict(
+            dict={
+                'CONTROL': {
+                    'restart_mode': 'from_scratch',
+                    'tstress': self.ctx.protocol['tstress'],
+                    'tprnfor': self.ctx.protocol['tprnfor'],
+                },
+                'SYSTEM': {
+                    'ecutwfc': max(ecutwfc),
+                    'ecutrho': max(ecutrho),
+                    'smearing': self.ctx.protocol['smearing'],
+                    'degauss': self.ctx.protocol['degauss'],
+                    'occupations': self.ctx.protocol['occupations'],
+                },
+                'ELECTRONS': {
+                    'conv_thr': self.ctx.protocol['convergence_threshold_per_atom'] * len(self.inputs.structure.sites),
+                }
             }
-        })
+        )
 
     def run_bands(self):
         """Run the `PwBandsWorkChain` to compute the band structure."""
+
         def get_common_inputs():
             """Return the dictionary of inputs to be used as the basis for each `PwBaseWorkChain`."""
             protocol, protocol_modifiers = self._get_protocol()
             checked_pseudos = protocol.check_pseudos(
                 modifier_name=protocol_modifiers.get('pseudo', None),
-                pseudo_data=protocol_modifiers.get('pseudo_data', None))
+                pseudo_data=protocol_modifiers.get('pseudo_data', None)
+            )
             known_pseudos = checked_pseudos['found']
 
             inputs = AttributeDict({
@@ -172,11 +189,7 @@ class PwBandStructureWorkChain(WorkChain):
 
         self.report('workchain successfully completed')
         link_labels = [
-            'primitive_structure',
-            'seekpath_parameters',
-            'scf_parameters',
-            'band_parameters',
-            'band_structure'
+            'primitive_structure', 'seekpath_parameters', 'scf_parameters', 'band_parameters', 'band_structure'
         ]
 
         for link_triple in workchain.get_outgoing().all():
