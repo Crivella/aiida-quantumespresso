@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 """Base class for parser of Quantum ESPRESSO pw.x and cp.x input files based on generic parser of `qe-tools` package."""
-from __future__ import absolute_import
-from __future__ import print_function
-
 import re
-from six.moves import zip
 
 from aiida.common import InputValidationError
 
 
-class StructureParseMixin(object):
+class StructureParseMixin:
     """Mixin that extends :class:`~qe_tools.parsers.qeinputparser.QeInputFile` to parse a ``StructureData``."""
 
     # pylint: disable=too-few-public-methods
@@ -46,7 +42,7 @@ class StructureParseMixin(object):
         """, re.X | re.I
         )
 
-        data = self.get_structure_from_qeinput()
+        data = self.structure
         species = self.atomic_species
 
         structure = StructureData()
@@ -55,8 +51,10 @@ class StructureParseMixin(object):
         for mass, name, pseudo in zip(species['masses'], species['names'], species['pseudo_file_names']):
             try:
                 symbols = valid_elements_regex.search(pseudo).group('ele').capitalize()
-            except Exception:
-                raise InputValidationError('could not determine element name from pseudo name: {}'.format(pseudo))
+            except Exception as exception:
+                raise InputValidationError(
+                    f'could not determine element name from pseudo name: {pseudo}'
+                ) from exception
             structure.append_kind(Kind(name=name, symbols=symbols, mass=mass))
 
         for symbol, position in zip(data['atom_names'], data['positions']):

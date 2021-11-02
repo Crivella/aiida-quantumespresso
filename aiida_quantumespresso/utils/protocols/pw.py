@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """Protocol definitions for workflow input generation."""
-from __future__ import absolute_import
-from __future__ import print_function
 import json
 import os
-import six
+from copy import deepcopy
 
 
 def _load_pseudo_metadata(filename):
@@ -65,12 +63,23 @@ def _get_all_protocol_modifiers():
             'parameters_default': 'default'
         }
     }
-    protocols['theos-ht-1.0']['parameters']['scdm'] = protocols['theos-ht-1.0']['parameters']['default']
+    protocols['theos-ht-1.0']['parameters']['scdm'] = deepcopy(protocols['theos-ht-1.0']['parameters']['default'])
     protocols['theos-ht-1.0']['parameters']['scdm']['num_bands_factor'] = 3.0
+
+    # a protocol for testing purpose, decrease kmesh density & ecutoff
+    testing = deepcopy(protocols['theos-ht-1.0'])
+    testing['parameters']['fast']['kpoints_mesh_density'] = 0.3
+    testing['parameters_default'] = 'fast'
+    ps_data = testing['pseudo']['SSSP-efficiency-1.1']
+    for pseudo in ps_data:
+        ps_data[pseudo]['cutoff'] = ps_data[pseudo]['cutoff'] / 2
+    testing['pseudo']['SSSP-efficiency-1.1'] = ps_data
+    protocols['testing'] = testing
+
     return protocols
 
 
-class ProtocolManager(object):
+class ProtocolManager:
     """A class to manage calculation protocols."""
 
     def __init__(self, name):
@@ -81,8 +90,8 @@ class ProtocolManager(object):
         self.name = name
         try:
             self.modifiers = _get_all_protocol_modifiers()[name]
-        except KeyError:
-            raise ValueError("Unknown protocol '{}'".format(name))
+        except KeyError as exception:
+            raise ValueError(f"Unknown protocol '{name}'") from exception
 
     def get_protocol_data(self, modifiers=None):
         """Return the full info on the specific protocol, using the (optional) modifiers.
@@ -117,17 +126,17 @@ class ProtocolManager(object):
         if pseudo_modifier_name == 'custom':
             try:
                 pseudo_data = modifiers_copy.pop('pseudo_data')
-            except KeyError:
+            except KeyError as exception:
                 raise ValueError(
                     "You specified 'custom' as a modifier name for 'pseudo', but you did not provide "
                     "a 'pseudo_data' key."
-                )
+                ) from exception
         else:
             pseudo_data = self.get_pseudo_data(pseudo_modifier_name)
 
         # Check that there are no unknown modifiers
         if modifiers_copy:
-            raise ValueError('Unknown modifiers specified: {}'.format(','.join(sorted(modifiers_copy))))
+            raise ValueError(f"Unknown modifiers specified: {','.join(sorted(modifiers_copy))}")
 
         retdata = self.get_parameters_data(parameters_modifier_name)
         retdata['pseudo_data'] = pseudo_data
@@ -200,7 +209,7 @@ class ProtocolManager(object):
         # Pseudo with MD5 found, but wrong element!
         mismatch = {}
 
-        for element, this_pseudo_data in six.iteritems(pseudo_data):
+        for element, this_pseudo_data in pseudo_data.items():
             md5 = this_pseudo_data['md5']
 
             builder = QueryBuilder()
@@ -212,8 +221,8 @@ class ProtocolManager(object):
                     if element == this_element:
                         found[element] = this_uuid
                         break
-                    else:
-                        this_mismatch_elements.append(this_element)
+
+                    this_mismatch_elements.append(this_element)
                 if element not in found:
                     mismatch[element] = this_mismatch_elements
             else:

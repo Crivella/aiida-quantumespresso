@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 """Tests for the calculation input helper utilities."""
-from __future__ import absolute_import
-
 import pytest
 
 from aiida_quantumespresso.calculations.helpers import pw_input_helper, QEInputValidationError
 
 
-def test_pw_helper_multidimensional(aiida_profile, generate_structure):
+def test_pw_helper_multidimensional(generate_structure):
     """Test the helper for parameters containing a multidimensional parameter."""
     structure = generate_structure()
     parameters = {

@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """`CalcJob` implementation for the matdyn.x code of Quantum ESPRESSO."""
-from __future__ import absolute_import
-
 from aiida import orm
 from aiida_quantumespresso.calculations.namelists import NamelistsCalculation
 from aiida_quantumespresso.data.force_constants import ForceConstantsData
@@ -27,24 +25,26 @@ class MatdynCalculation(NamelistsCalculation):
 
     @classmethod
     def define(cls, spec):
+        """Define the process specification."""
         # yapf: disable
-        super(MatdynCalculation, cls).define(spec)
+        super().define(spec)
         spec.input('force_constants', valid_type=ForceConstantsData, required=True)
         spec.input('kpoints', valid_type=orm.KpointsData, help='Kpoints on which to calculate the phonon frequencies.')
         spec.inputs.pop('parent_folder')
         spec.output('output_parameters', valid_type=orm.Dict)
         spec.output('output_phonon_bands', valid_type=orm.BandsData)
         spec.default_output_node = 'output_parameters'
-        spec.exit_code(100, 'ERROR_NO_RETRIEVED_FOLDER',
-            message='The retrieved folder data node could not be accessed.')
-        spec.exit_code(110, 'ERROR_READING_OUTPUT_FILE',
-            message='The output file could not be read from the retrieved folder.')
-        spec.exit_code(130, 'ERROR_JOB_NOT_DONE',
-            message='The computation did not finish properly ("JOB DONE" not found).')
-        spec.exit_code(131, 'ERROR_OUTPUT_KPOINTS_MISSING',
+        spec.exit_code(310, 'ERROR_OUTPUT_STDOUT_READ',
+            message='The stdout output file could not be read.')
+        spec.exit_code(312, 'ERROR_OUTPUT_STDOUT_INCOMPLETE',
+            message='The stdout output file was incomplete probably because the calculation got interrupted.')
+        spec.exit_code(330, 'ERROR_OUTPUT_FREQUENCIES',
+            message='The output frequencies file could not be read from the retrieved folder.')
+        spec.exit_code(410, 'ERROR_OUTPUT_KPOINTS_MISSING',
             message='Number of kpoints not found in the output data')
-        spec.exit_code(132, 'ERROR_OUTPUT_KPOINTS_INCOMMENSURATE',
+        spec.exit_code(411, 'ERROR_OUTPUT_KPOINTS_INCOMMENSURATE',
             message='Number of kpoints in the inputs is not commensurate with those in the output')
+        # yapf: enable
 
     def _get_following_text(self):
         """Add the kpoints after the namelist."""
@@ -53,22 +53,26 @@ class MatdynCalculation(NamelistsCalculation):
         except AttributeError:
             kpoints = self.inputs.kpoints.get_kpoints_mesh(print_list=True)
 
-        kpoints_string = [u'{}'.format(len(kpoints))]
+        kpoints_string = [f'{len(kpoints)}']
         for kpoint in kpoints:
-            kpoints_string.append(u'{:18.10f} {:18.10f} {:18.10f}'.format(*kpoint))
+            kpoints_string.append('{:18.10f} {:18.10f} {:18.10f}'.format(*kpoint))
 
         return '\n'.join(kpoints_string) + '\n'
 
     def prepare_for_submission(self, folder):
-        """Create the input files from the input nodes passed to this instance of the `CalcJob`.
+        """Prepare the calculation job for submission by transforming input nodes into input files.
 
-        :param folder: an `aiida.common.folders.Folder` to temporarily write files on disk
-        :return: `aiida.common.datastructures.CalcInfo` instance
+        In addition to the input files being written to the sandbox folder, a `CalcInfo` instance will be returned that
+        contains lists of files that need to be copied to the remote machine before job submission, as well as file
+        lists that are to be retrieved after job completion.
+
+        :param folder: a sandbox folder to temporarily write files on disk.
+        :return: :py:`~aiida.common.datastructures.CalcInfo` instance.
         """
         force_constants = self.inputs.force_constants
         self._blocked_keywords.append(('INPUT', 'flfrc', force_constants.filename))
 
-        calcinfo = super(MatdynCalculation, self).prepare_for_submission(folder)
+        calcinfo = super().prepare_for_submission(folder)
         calcinfo.local_copy_list.append((force_constants.uuid, force_constants.filename, force_constants.filename))
 
         return calcinfo

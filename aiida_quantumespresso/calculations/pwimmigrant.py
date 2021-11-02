@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Plugin to immigrate a Quantum Espresso pw.x job that was not run using AiiDa."""
 # TODO: Document the current limitations (e.g. ibrav == 0)
-from __future__ import absolute_import
 import os
 from copy import deepcopy
 from aiida_quantumespresso.calculations.pw import PwCalculation
@@ -12,7 +11,6 @@ from aiida.common.folders import SandboxFolder
 from aiida.common import (FeatureNotAvailable, InvalidOperation, InputValidationError)
 from aiida.common.links import LinkType
 from aiida_quantumespresso.tools import pwinputparser
-from six.moves import zip
 
 
 class PwimmigrantCalculation(PwCalculation):
@@ -47,15 +45,15 @@ class PwimmigrantCalculation(PwCalculation):
 
     def _init_internal_params(self):
 
-        super(PwimmigrantCalculation, self)._init_internal_params()
+        super()._init_internal_params()
 
     def create_input_nodes(self, open_transport, input_file_name=None, output_file_name=None, remote_workdir=None):
         """Create calculation input nodes based on the job's files.
 
         :param open_transport: An open instance of the transport class of the
             calculation's computer. See the tutorial for more information.
-        :type open_transport: aiida.transport.plugins.local.LocalTransport
-            or aiida.transport.plugins.ssh.SshTransport
+        :type open_transport: aiida.transports.plugins.local.LocalTransport
+            or aiida.transports.plugins.ssh.SshTransport
 
 
         This method parses the files in the job's remote working directory to
@@ -201,7 +199,7 @@ class PwimmigrantCalculation(PwCalculation):
             # Parse the input file.
             local_path = os.path.join(folder.abspath, self._INPUT_FILE_NAME)
             with open(local_path) as fin:
-                pwinputfile = pwinputparser.PwInputFile(fin)
+                pwinputfile = pwinputparser.PwInputFile(fin.read())
 
             # Determine PREFIX, if it hasn't already been set by the user.
             if self._PREFIX is None:
@@ -229,7 +227,7 @@ class PwimmigrantCalculation(PwCalculation):
             # Copy the pseudo files to the temp folder.
             for fnm in pwinputfile.atomic_species['pseudo_file_names']:
                 remote_path = os.path.join(
-                    self._get_remote_workdir(), self._OUTPUT_SUBFOLDER, '{}.save/'.format(self._PREFIX), fnm
+                    self._get_remote_workdir(), self._OUTPUT_SUBFOLDER, f'{self._PREFIX}.save/', fnm
                 )
                 open_transport.get(remote_path, folder.abspath)
 
@@ -307,8 +305,8 @@ class PwimmigrantCalculation(PwCalculation):
 
         :param open_transport: An open instance of the transport class of the
             calculation's computer.
-        :type open_transport: aiida.transport.plugins.local.LocalTransport
-            or aiida.transport.plugins.ssh.SshTransport
+        :type open_transport: aiida.transports.plugins.local.LocalTransport
+            or aiida.transports.plugins.ssh.SshTransport
 
         Here, we
 
@@ -343,8 +341,8 @@ class PwimmigrantCalculation(PwCalculation):
 
         :param open_transport: An open instance of the transport class of the
             calculation's computer. See the tutorial for more information.
-        :type open_transport: aiida.transport.plugins.local.LocalTransport
-            or aiida.transport.plugins.ssh.SshTransport
+        :type open_transport: aiida.transports.plugins.local.LocalTransport
+            or aiida.transports.plugins.ssh.SshTransport
 
         The next time the daemon updates the status of calculations, it will
         see this job is in the 'COMPUTED' state and will retrieve its output

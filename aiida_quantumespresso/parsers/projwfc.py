@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import, division
+from pathlib import Path
 import re
 import fnmatch
-import traceback
 
 import numpy as np
-from six.moves import range
 
-from aiida.common import NotExistent, LinkType
-from aiida.orm import Dict, ProjectionData, BandsData, XyData, CalcJobNode
-from aiida.parsers import Parser
+from aiida.orm import Dict, ProjectionData, BandsData, XyData
 from aiida.plugins import OrbitalFactory
 
 from aiida_quantumespresso.parsers import QEOutputParsingError
-from aiida_quantumespresso.parsers import parse_raw_out_basic
+from aiida_quantumespresso.parsers.parse_raw.base import (
+    parse_output_base, convert_qe2aiida_structure, convert_qe_to_kpoints
+)
+from aiida_quantumespresso.utils.mapping import get_logging_container
+
+from .base import Parser
 
 
 def find_orbitals_from_statelines(out_info_dict):
@@ -23,11 +24,47 @@ def find_orbitals_from_statelines(out_info_dict):
     :param out_info_dict: contains various technical internals useful in parsing
     :return: orbitals, a list of orbitals suitable for setting ProjectionData
     """
+
+    # Format of statelines
+    # From PP/src/projwfc.f90: (since Oct. 8 2019)
+    #
+    # 1000 FORMAT (5x,"state #",i4,": atom ",i3," (",a3,"), wfc ",i2," (l=",i1)
+    # IF (lspinorb) THEN
+    # 1001 FORMAT (" j=",f3.1," m_j=",f4.1,")")
+    # ELSE IF (noncolin) THEN
+    # 1002 FORMAT (" m=",i2," s_z=",f4.1,")")
+    # ELSE
+    # 1003 FORMAT (" m=",i2,")")
+    # ENDIF
+    #
+    # Before:
+    # IF (lspinorb) THEN
+    # ...
+    # 1000    FORMAT (5x,"state #",i4,": atom ",i3," (",a3,"), wfc ",i2, &
+    #               " (j=",f3.1," l=",i1," m_j=",f4.1,")")
+    # ELSE
+    # ...
+    # 1500    FORMAT (5x,"state #",i4,": atom ",i3," (",a3,"), wfc ",i2, &
+    #               " (l=",i1," m=",i2," s_z=",f4.1,")")
+    # ENDIF
+
     out_file = out_info_dict['out_file']
-    atomnum_re = re.compile(r'atom (.*?)\(')
-    element_re = re.compile(r'\((.*?)\)')
-    lnum_re = re.compile(r'l=(.*?)m=')
-    mnum_re = re.compile(r'm=(.*?)\)')
+    atomnum_re = re.compile(r'atom\s*([0-9]+?)[^0-9]')
+    element_re = re.compile(r'atom\s*[0-9]+\s*\(\s*([A-Za-z0-9-_]+?)\s*\)')
+    if out_info_dict['spinorbit']:
+        # spinorbit
+        lnum_re = re.compile(r'l=\s*([0-9]+?)[^0-9]')
+        jnum_re = re.compile(r'j=\s*([0-9.]+?)[^0-9.]')
+        mjnum_re = re.compile(r'm_j=\s*([-0-9.]+?)[^-0-9.]')
+    elif not out_info_dict['collinear']:
+        # non-collinear
+        lnum_re = re.compile(r'l=\s*([0-9]+?)[^0-9]')
+        mnum_re = re.compile(r'm=\s*([-0-9]+?)[^-0-9]')
+        sznum_re = re.compile(r's_z=\s*([-0-9.]*?)[^-0-9.]')
+    else:
+        # collinear / no spin
+        lnum_re = re.compile(r'l=\s*([0-9]+?)[^0-9]')
+        mnum_re = re.compile(r'm=\s*([-0-9]+?)[^-0-9]')
     wfc_lines = out_info_dict['wfc_lines']
     state_lines = [out_file[wfc_line] for wfc_line in wfc_lines]
     state_dicts = []
@@ -38,8 +75,14 @@ def find_orbitals_from_statelines(out_info_dict):
             state_dict['atomnum'] -= 1  # to keep with orbital indexing
             state_dict['kind_name'] = element_re.findall(state_line)[0].strip()
             state_dict['angular_momentum'] = int(lnum_re.findall(state_line)[0])
-            state_dict['magnetic_number'] = int(mnum_re.findall(state_line)[0])
-            state_dict['magnetic_number'] -= 1  # to keep with orbital indexing
+            if out_info_dict['spinorbit']:
+                state_dict['total_angular_momentum'] = float(jnum_re.findall(state_line)[0])
+                state_dict['magnetic_number'] = float(mjnum_re.findall(state_line)[0])
+            else:
+                if not out_info_dict['collinear']:
+                    state_dict['spin'] = float(sznum_re.findall(state_line)[0])
+                state_dict['magnetic_number'] = int(mnum_re.findall(state_line)[0])
+                state_dict['magnetic_number'] -= 1  # to keep with orbital indexing
         except ValueError:
             raise QEOutputParsingError('State lines are not formatted in a standard way.')
         state_dicts.append(state_dict)
@@ -64,9 +107,14 @@ def find_orbitals_from_statelines(out_info_dict):
 
     # here we set the resulting state_dicts to a new set of orbitals
     orbitals = []
-    RealhydrogenOrbital = OrbitalFactory('realhydrogen')
+    if out_info_dict['spinorbit']:
+        OrbitalCls = OrbitalFactory('spinorbithydrogen')
+    elif not out_info_dict['collinear']:
+        OrbitalCls = OrbitalFactory('noncollinearhydrogen')
+    else:
+        OrbitalCls = OrbitalFactory('realhydrogen')
     for state_dict in state_dicts:
-        orbitals.append(RealhydrogenOrbital(**state_dict))
+        orbitals.append(OrbitalCls(**state_dict))
 
     return orbitals
 
@@ -78,10 +126,9 @@ def spin_dependent_subparser(out_info_dict):
     :param out_info_dict: contains various technical internals useful in parsing
     :return: ProjectionData, BandsData parsed from out_file
     """
-
     out_file = out_info_dict['out_file']
     spin_down = out_info_dict['spin_down']
-    od = out_info_dict  #using a shorter name for convenience
+    od = out_info_dict  # using a shorter name for convenience
     #   regular expressions needed for later parsing
     WaveFraction1_re = re.compile(r'\=(.*?)\*')  # state composition 1
     WaveFractionremain_re = re.compile(r'\+(.*?)\*')  # state comp 2
@@ -99,12 +146,12 @@ def spin_dependent_subparser(out_info_dict):
             for j in range(i * od['num_bands'], (i + 1) * od['num_bands'], 1):
                 out_ind = od['e_lines'][j]
                 try:
-                    # post ~6.3 output format "e ="
+                    # post ~6.3 <6.5 output format "e ="
                     val = out_file[out_ind].split()[2]
                     float(val)
                 except ValueError:
-                    # pre ~6.3 output format? "==== e("
-                    val = out_file[out_ind].split()[4]
+                    # pre ~6.3 and 6.5+ output format "==== e("
+                    val = out_file[out_ind].split(' = ')[1].split()[0]
                 bands[i % od['k_states']][j % od['num_bands']] = val
                 #subloop grabs pdos
                 wave_fraction = []
@@ -122,19 +169,14 @@ def spin_dependent_subparser(out_info_dict):
                     #sets relevant values in pdos_array
                     projection_arrays[i % od['k_states']][j % od['num_bands']][wave_id[l] - 1] = wave_fraction[l]
     except IndexError:
-        raise QEOutputParsingError('the standard out file does not ' 'comply with the official ' 'documentation.')
+        raise QEOutputParsingError('the standard out file does not comply with the official documentation.')
 
     bands_data = BandsData()
-    # Attempts to retrieve the kpoints from the parent calc
-    parent_calc = out_info_dict['parent_calc']
+    kpoints = od['kpoints']
     try:
-        parent_kpoints = parent_calc.get_incoming(link_label_filter='kpoints').one().node
-    except ValueError:
-        raise QEOutputParsingError('The parent had no input kpoints! Cannot parse from this!')
-    try:
-        if len(od['k_vect']) != len(parent_kpoints.get_kpoints()):
+        if len(od['k_vect']) != len(kpoints.get_kpoints()):
             raise AttributeError
-        bands_data.set_kpointsdata(parent_kpoints)
+        bands_data.set_kpointsdata(kpoints)
     except AttributeError:
         bands_data.set_kpoints(od['k_vect'].astype(float))
 
@@ -193,6 +235,8 @@ def spin_dependent_pdos_subparser(out_info_dict):
     :return: (pdos_name, pdos_array) tuples for all the specific pdos
     """
     spin = out_info_dict['spin']
+    collinear = out_info_dict.get('collinear', True)
+    spinorbit = out_info_dict.get('spinorbit', False)
     spin_down = out_info_dict['spin_down']
     pdos_atm_array_dict = out_info_dict['pdos_atm_array_dict']
     if spin:
@@ -213,8 +257,16 @@ def spin_dependent_pdos_subparser(out_info_dict):
     # both are produced in the same order (thus the sorted file_names)
     for name in pdos_file_names:
         this_array = pdos_atm_array_dict[name]
-        for i in range(fa, np.shape(this_array)[1], mf):
-            out_arrays.append(this_array[:, i])
+        if not collinear and not spinorbit:
+            # In the non-collinear, non-spinorbit case, the "up"-spin orbitals
+            # come first, followed by all "down" orbitals
+            for i in range(3, np.shape(this_array)[1], 2):
+                out_arrays.append(this_array[:, i])
+            for i in range(4, np.shape(this_array)[1], 2):
+                out_arrays.append(this_array[:, i])
+        else:
+            for i in range(fa, np.shape(this_array)[1], mf):
+                out_arrays.append(this_array[:, i])
 
     return out_arrays
 
@@ -231,19 +283,20 @@ class ProjwfcParser(Parser):
 
         Retrieves projwfc output, and some basic information from the out_file, such as warnings and wall_time
         """
-        # Check that the retrieved folder is there
+        retrieved = self.retrieved
+        # Get the temporary retrieved folder
         try:
-            out_folder = self.retrieved
-        except NotExistent:
-            return self.exit_codes.ERROR_NO_RETRIEVED_FOLDER
+            retrieved_temporary_folder = kwargs['retrieved_temporary_folder']
+        except KeyError:
+            return self.exit(self.exit_codes.ERROR_NO_RETRIEVED_TEMPORARY_FOLDER)
 
         # Read standard out
         try:
             filename_stdout = self.node.get_option('output_filename')  # or get_attribute(), but this is clearer
-            with out_folder.open(filename_stdout, 'r') as fil:
+            with retrieved.open(filename_stdout, 'r') as fil:
                 out_file = fil.readlines()
         except OSError:
-            return self.exit_codes.ERROR_READING_OUTPUT_FILE
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_READ)
 
         job_done = False
         for i in range(len(out_file)):
@@ -252,48 +305,59 @@ class ProjwfcParser(Parser):
                 job_done = True
                 break
         if not job_done:
-            self.logger.error('Computation did not finish properly')
-            return self.exit_codes.ERROR_JOB_NOT_DONE
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_INCOMPLETE)
 
         # Parse basic info and warnings, and output them as output_parmeters
-        parsed_data = parse_raw_out_basic(out_file, 'PROJWFC')
-        for message in parsed_data['warnings']:
-            self.logger.error(message)
-        output_params = Dict(dict=parsed_data)
-        self.out('output_parameters', output_params)
+        parsed_data, logs = parse_output_base(out_file, 'PROJWFC')
+        self.emit_logs(logs)
+        self.out('output_parameters', Dict(dict=parsed_data))
+
+        # Parse the XML to obtain the `structure`, `kpoints` and spin-related settings from the parent calculation
+        self.exit_code_xml = None
+        parsed_xml, logs_xml = self._parse_xml(retrieved_temporary_folder)
+        self.emit_logs(logs_xml)
+
+        if self.exit_code_xml:
+            return self.exit(self.exit_code_xml)
+
+        # we create a dictionary the progressively accumulates more info
+        out_info_dict = {}
+
+        out_info_dict['structure'] = convert_qe2aiida_structure(parsed_xml['structure'])
+        out_info_dict['kpoints'] = convert_qe_to_kpoints(parsed_xml, out_info_dict['structure'])
+        out_info_dict['nspin'] = parsed_xml.get('number_of_spin_components')
+        out_info_dict['collinear'] = not parsed_xml.get('non_colinear_calculation')
+        out_info_dict['spinorbit'] = parsed_xml.get('spin_orbit_calculation')
+        out_info_dict['spin'] = out_info_dict['nspin'] == 2
 
         # check and read pdos_tot file
-        out_filenames = out_folder.list_object_names()
+        out_filenames = retrieved.list_object_names()
         try:
             pdostot_filename = fnmatch.filter(out_filenames, '*pdos_tot*')[0]
-            with out_folder.open(pdostot_filename, 'r') as pdostot_file:
+            with retrieved.open(pdostot_filename, 'r') as pdostot_file:
                 # Columns: Energy(eV), Ldos, Pdos
-                pdostot_array = np.genfromtxt(pdostot_file)
+                pdostot_array = np.atleast_2d(np.genfromtxt(pdostot_file))
                 energy = pdostot_array[:, 0]
                 dos = pdostot_array[:, 1]
         except (OSError, KeyError):
-            self.logger.error('Error reading pdos_tot output file')
-            return self.exit_codes.ERROR_READING_PDOSTOT_FILE
+            return self.exit(self.exit_codes.ERROR_READING_PDOSTOT_FILE)
 
         # check and read all of the individual pdos_atm files
         pdos_atm_filenames = fnmatch.filter(out_filenames, '*pdos_atm*')
         pdos_atm_array_dict = {}
         for name in pdos_atm_filenames:
-            with out_folder.open(name, 'r') as pdosatm_file:
-                pdos_atm_array_dict[name] = np.genfromtxt(pdosatm_file)
+            with retrieved.open(name, 'r') as pdosatm_file:
+                pdos_atm_array_dict[name] = np.atleast_2d(np.genfromtxt(pdosatm_file))
 
         # finding the bands and projections
-        # we create a dictionary the progressively accumulates more info
-        out_info_dict = {}
         out_info_dict['out_file'] = out_file
         out_info_dict['energy'] = energy
         out_info_dict['pdos_atm_array_dict'] = pdos_atm_array_dict
         try:
             new_nodes_list = self._parse_bands_and_projections(out_info_dict)
         except QEOutputParsingError as err:
-            self.logger.error('Error parsing bands and projections: {}'.format(err))
-            traceback.print_exc()
-            return self.exit_codes.ERROR_PARSING_PROJECTIONS
+            self.logger.error(f'Error parsing bands and projections: {err}')
+            return self.exit(self.exit_codes.ERROR_PARSING_PROJECTIONS)
         for linkname, node in new_nodes_list:
             self.out(linkname, node)
 
@@ -301,6 +365,37 @@ class ProjwfcParser(Parser):
         Dos_out.set_x(energy, 'Energy', 'eV')
         Dos_out.set_y(dos, 'Dos', 'states/eV')
         self.out('Dos', Dos_out)
+
+    def _parse_xml(self, retrieved_temporary_folder):
+        """Parse the XML file.
+
+        The XML must be parsed in order to obtain the required information for the orbital parsing.
+        """
+        from .parse_xml.exceptions import XMLParseError, XMLUnsupportedFormatError
+        from .parse_xml.pw.parse import parse_xml
+
+        logs = get_logging_container()
+        parsed_xml = {}
+
+        xml_filepath = Path(retrieved_temporary_folder) / self.node.process_class.xml_path.name
+
+        if not xml_filepath.exists():
+            self.exit_code_xml = self.exit_codes.ERROR_OUTPUT_XML_MISSING
+            return parsed_xml, logs
+
+        try:
+            with xml_filepath.open('r') as handle:
+                parsed_xml, logs = parse_xml(handle, None)
+        except IOError:
+            self.exit_code_xml = self.exit_codes.ERROR_OUTPUT_XML_READ
+        except XMLParseError:
+            self.exit_code_xml = self.exit_codes.ERROR_OUTPUT_XML_PARSE
+        except XMLUnsupportedFormatError:
+            self.exit_code_xml = self.exit_codes.ERROR_OUTPUT_XML_FORMAT
+        except Exception:
+            self.exit_code_xml = self.exit_codes.ERROR_UNEXPECTED_PARSER_EXCEPTION
+
+        return parsed_xml, logs
 
     def _parse_bands_and_projections(self, out_info_dict):
         """Function that parses the standard output into bands and projection data.
@@ -337,47 +432,20 @@ class ProjwfcParser(Parser):
         # calculates the number of bands
         out_info_dict['num_bands'] = len(out_info_dict['psi_lines']) // len(out_info_dict['k_lines'])
 
-        # Uses the parent input parameters, and checks if the parent used
-        # spin calculations. Try to replace with a query, if possible.
-        try:
-            parent_calc = (
-                self.node.inputs.parent_folder.get_incoming(node_class=CalcJobNode,
-                                                            link_type=LinkType.CREATE).one().node
-            )
-        except ValueError as e:
-            raise QEOutputParsingError('Could not get parent calculation of input folder: {}'.format(e))
-        out_info_dict['parent_calc'] = parent_calc
-        try:
-            parent_param = parent_calc.get_outgoing(link_label_filter='output_parameters').one().node
-        except ValueError:
-            raise QEOutputParsingError('The parent had no output_parameters! Cannot parse from this!')
-        try:
-            structure = parent_calc.get_incoming(link_label_filter='structure').one().node
-        except ValueError:
-            raise QEOutputParsingError('The parent had no input structure! Cannot parse from this!')
-        try:
-            nspin = parent_param.get_dict()['number_of_spin_components']
-            if nspin != 1:
-                spin = True
-            else:
-                spin = False
-        except KeyError:
-            spin = False
-        out_info_dict['spin'] = spin
-
         # changes k-numbers to match spin
         # because if spin is on, k points double for up and down
         out_info_dict['k_states'] = len(out_info_dict['k_lines'])
-        if spin:
+        if out_info_dict['spin']:
             if out_info_dict['k_states'] % 2 != 0:
                 raise QEOutputParsingError('Internal formatting error regarding spin')
             out_info_dict['k_states'] = out_info_dict['k_states'] // 2
 
-        #   adds in the k-vector for each kpoint
+        # adds in the k-vector for each kpoint
         k_vect = [out_file[out_info_dict['k_lines'][i]].split()[2:] for i in range(out_info_dict['k_states'])]
         out_info_dict['k_vect'] = np.array(k_vect)
-        out_info_dict['structure'] = structure
         out_info_dict['orbitals'] = find_orbitals_from_statelines(out_info_dict)
+
+        spin = out_info_dict['spin']
 
         if spin:
             # I had to guess what the ordering of the spin is, because

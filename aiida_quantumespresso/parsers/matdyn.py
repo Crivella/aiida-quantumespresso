@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
-from six.moves import range
-
 from aiida import orm
-from aiida.common import exceptions
-from aiida.parsers.parser import Parser
-from qe_tools.constants import invcm_to_THz
+from qe_tools import CONSTANTS
+
 from aiida_quantumespresso.calculations.matdyn import MatdynCalculation
+from .base import Parser
 
 
 class MatdynParser(Parser):
@@ -15,25 +11,18 @@ class MatdynParser(Parser):
 
     def parse(self, **kwargs):
         """Parse the retrieved files from a `MatdynCalculation`."""
-        try:
-            output_folder = self.retrieved
-        except exceptions.NotExistent:
-            return self.exit_codes.ERROR_NO_RETRIEVED_FOLDER
-
+        retrieved = self.retrieved
         filename_stdout = self.node.get_option('output_filename')
         filename_frequencies = MatdynCalculation._PHONON_FREQUENCIES_NAME
 
-        if filename_stdout not in output_folder.list_object_names():
-            self.logger.error("The standard output file '{}' was not found but is required".format(filename_stdout))
-            return self.exit_codes.ERROR_READING_OUTPUT_FILE
+        if filename_stdout not in retrieved.list_object_names():
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_READ)
 
-        if 'JOB DONE' not in output_folder.get_object_content(filename_stdout):
-            self.logger.error('Computation did not finish properly')
-            return self.exit_codes.ERROR_JOB_NOT_DONE
+        if 'JOB DONE' not in retrieved.get_object_content(filename_stdout):
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_INCOMPLETE)
 
-        if filename_frequencies not in output_folder.list_object_names():
-            self.logger.error("The frequencies output file '{}' was not found but is required".format(filename_stdout))
-            return self.exit_codes.ERROR_READING_OUTPUT_FILE
+        if filename_frequencies not in retrieved.list_object_names():
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_READ)
 
         # Extract the kpoints from the input data and create the `KpointsData` for the `BandsData`
         try:
@@ -44,19 +33,15 @@ class MatdynParser(Parser):
             kpoints_for_bands = orm.KpointsData()
             kpoints_for_bands.set_kpoints(kpoints)
 
-        parsed_data = parse_raw_matdyn_phonon_file(output_folder.get_object_content(filename_frequencies))
+        parsed_data = parse_raw_matdyn_phonon_file(retrieved.get_object_content(filename_frequencies))
 
         try:
             num_kpoints = parsed_data.pop('num_kpoints')
         except KeyError:
-            exit_code = self.exit_codes.ERROR_OUTPUT_KPOINTS_MISSING
-            self.logger.error(exit_code.message)
-            return exit_code
+            return self.exit(self.exit_codes.ERROR_OUTPUT_KPOINTS_MISSING)
 
         if num_kpoints != kpoints.shape[0]:
-            exit_code = self.exit_codes.ERROR_OUTPUT_KPOINTS_INCOMMENSURATE
-            self.logger.error(exit_code.message)
-            return exit_code
+            return self.exit(self.exit_codes.ERROR_OUTPUT_KPOINTS_INCOMMENSURATE)
 
         output_bands = orm.BandsData()
         output_bands.set_kpointsdata(kpoints_for_bands)
@@ -124,7 +109,7 @@ def parse_raw_matdyn_phonon_file(phonon_frequencies):
     for i in range(num_kpoints):
         for j in range(num_bands):
             try:
-                freq_matrix[i, j] = corrected_data[counter] * invcm_to_THz  # from cm-1 to THz
+                freq_matrix[i, j] = corrected_data[counter] * CONSTANTS.invcm_to_THz  # from cm-1 to THz
             except ValueError:
                 parsed_data['warnings'].append('Error while parsing the frequencies')
             except IndexError:

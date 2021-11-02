@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
 """Calcfunction to primitivize a structure and return high symmetry k-point path through its Brillouin zone."""
-from __future__ import absolute_import
-from aiida.engine import calcfunction
+# pylint: disable=unused-import
+import warnings
+from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis
 
-
-@calcfunction
-def seekpath_structure_analysis(structure, parameters):
-    """Primitivize the structure with SeeKpath and return high symmetry k-point path through its Brillouin zone.
-
-    This calcfunction will take a structure and pass it through SeeKpath to get the normalized primitive cell and the
-    path of high symmetry k-points through its Brillouin zone. Note that the returned primitive cell may differ from the
-    original structure in which case the k-points are only congruent with the primitive cell.
-    """
-    from aiida.tools import get_explicit_kpoints_path
-    return get_explicit_kpoints_path(structure, **parameters.get_dict())
+warnings.warn(
+    'This module is deprecated and will be removed soon.\nPlease use instead the new module:\n'
+    'from aiida_quantumespresso.calculations.functions.seekpath_structure_analysis import seekpath_structure_analysis'
+    "\nOr use the entry point with the factory: CalculationFactory('quantumespresso.seekpath_structure_analysis')",
+    FutureWarning
+)

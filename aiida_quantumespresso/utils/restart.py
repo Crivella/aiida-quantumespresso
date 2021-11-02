@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Utility functions to return process builders ready to be submitted for restarting a Quantum ESPRESSO calculation."""
-from __future__ import absolute_import
-
 from aiida_quantumespresso.calculations.cp import CpCalculation
 from aiida_quantumespresso.calculations.neb import NebCalculation
 from aiida_quantumespresso.calculations.ph import PhCalculation
@@ -28,7 +26,7 @@ def get_builder_restart(node, from_scratch=False, use_symlink=False):
     supported = (CpCalculation, NebCalculation, PhCalculation, PwCalculation)
 
     if node.process_class not in supported:
-        raise TypeError('calculation class `{}` of {} is not one of {}'.format(node.process_class, node, supported))
+        raise TypeError(f'calculation class `{node.process_class}` of {node} is not one of {supported}')
 
     builder = node.get_builder_restart()
 

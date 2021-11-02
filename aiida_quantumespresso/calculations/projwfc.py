@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """`CalcJob` implementation for the projwfc.x code of Quantum ESPRESSO."""
-from __future__ import absolute_import
+from pathlib import Path
+
 from aiida.orm import RemoteData, FolderData, Dict, XyData
 from aiida_quantumespresso.calculations.namelists import NamelistsCalculation
 
@@ -26,13 +27,24 @@ class ProjwfcCalculation(NamelistsCalculation):
         ('PROJWFC', 'plotboxes', False),
     ]
     _default_parser = 'quantumespresso.projwfc'
-    _internal_retrieve_list = [NamelistsCalculation._PREFIX + '.pdos*']
+
+    xml_path = Path(NamelistsCalculation._default_parent_output_folder
+                    ).joinpath(f'{NamelistsCalculation._PREFIX}.save', 'data-file-schema.xml')
+    _internal_retrieve_list = [
+        NamelistsCalculation._PREFIX + '.pdos*',
+    ]
+    # The XML file is added to the temporary retrieve list since it is required for parsing, but already in the
+    # repository of a an ancestor calculation.
+    _retrieve_temporary_list = [
+        xml_path.as_posix(),
+    ]
 
     @classmethod
     def define(cls, spec):
+        """Define the process specification."""
         # yapf: disable
         from aiida.orm import ProjectionData, BandsData
-        super(ProjwfcCalculation, cls).define(spec)
+        super().define(spec)
         spec.input('parent_folder', valid_type=(RemoteData, FolderData), help='The output folder of a pw.x calculation')
         spec.output('output_parameters', valid_type=Dict)
         spec.output('Dos', valid_type=XyData)
@@ -45,13 +57,22 @@ class ProjwfcCalculation(NamelistsCalculation):
         spec.output('projections', valid_type=ProjectionData, required=False)
         spec.output('bands', valid_type=BandsData, required=False)
         spec.default_output_node = 'output_parameters'
-        spec.exit_code(
-            100, 'ERROR_NO_RETRIEVED_FOLDER', message='The retrieved folder data node could not be accessed.')
-        spec.exit_code(
-            110, 'ERROR_READING_OUTPUT_FILE', message='The output file could not be read from the retrieved folder.')
-        spec.exit_code(
-            111, 'ERROR_READING_PDOSTOT_FILE', message='The pdos_tot file could not be read from the retrieved folder.')
-        spec.exit_code(
-            112, 'ERROR_PARSING_PROJECTIONS', message='An exception was raised parsing bands and projections.')
-        spec.exit_code(
-            130, 'ERROR_JOB_NOT_DONE', message='The computation did not finish properly (\'JOB DONE\' not found).')
+        spec.exit_code(301, 'ERROR_NO_RETRIEVED_TEMPORARY_FOLDER',
+            message='The retrieved temporary folder could not be accessed.')
+        spec.exit_code(303, 'ERROR_OUTPUT_XML_MISSING',
+            message='The retrieved folder did not contain the required XML file.')
+        spec.exit_code(310, 'ERROR_OUTPUT_STDOUT_READ',
+            message='The stdout output file could not be read.')
+        spec.exit_code(312, 'ERROR_OUTPUT_STDOUT_INCOMPLETE',
+            message='The stdout output file was incomplete probably because the calculation got interrupted.')
+        spec.exit_code(320, 'ERROR_OUTPUT_XML_READ',
+            message='The XML output file could not be read.')
+        spec.exit_code(321, 'ERROR_OUTPUT_XML_PARSE',
+            message='The XML output file could not be parsed.')
+        spec.exit_code(322, 'ERROR_OUTPUT_XML_FORMAT',
+            message='The XML output file has an unsupported format.')
+        spec.exit_code(330, 'ERROR_READING_PDOSTOT_FILE',
+            message='The pdos_tot file could not be read from the retrieved folder.')
+        spec.exit_code(340, 'ERROR_PARSING_PROJECTIONS',
+            message='An exception was raised parsing bands and projections.')
+        # yapf: enable

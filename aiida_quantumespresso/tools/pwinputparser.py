@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 """Utilities to parse Quantum ESPRESSO pw.x input files into AiiDA nodes or builders."""
-from __future__ import absolute_import
-
 import copy
 import re
-import six
-from six.moves import zip
 import numpy as np
 
-from aiida.orm import Code, Dict, UpfData
+from aiida.orm import Code, Dict
 from aiida.common.folders import Folder
-from aiida.plugins import CalculationFactory
-
+from aiida.plugins import CalculationFactory, DataFactory
 from qe_tools.parsers import PwInputFile as BasePwInputFile
+
 from .base import StructureParseMixin
+
+UpfData = DataFactory('pseudo.upf')
 
 
 class PwInputFile(StructureParseMixin, BasePwInputFile):
@@ -58,12 +56,12 @@ class PwInputFile(StructureParseMixin, BasePwInputFile):
         elif self.k_points['type'] == 'gamma':
             kpoints.set_kpoints_mesh([1, 1, 1])
         else:
-            raise NotImplementedError('support for units {} not yet implemented'.format(self.k_points['type']))
+            raise NotImplementedError(f"support for units {self.k_points['type']} not yet implemented")
 
         return kpoints
 
 
-def create_builder_from_file(input_folder, input_file_name, code, metadata, pseudo_folder_path=None, use_first=False):
+def create_builder_from_file(input_folder, input_file_name, code, metadata, pseudo_folder_path=None):
     """Create a populated process builder for a `PwCalculation` from a standard QE input file and pseudo (upf) files.
 
     :param input_folder: the folder containing the input file
@@ -76,8 +74,6 @@ def create_builder_from_file(input_folder, input_file_name, code, metadata, pseu
     :type metadata: dict
     :param pseudo_folder_path: the folder containing the upf files (if None, then input_folder is used)
     :type pseudo_folder_path: aiida.common.folders.Folder or str or None
-    :param use_first: passed to UpfData.get_or_create
-    :type use_first: bool
     :raises NotImplementedError: if the structure is not ibrav=0
     :return: a builder instance for PwCalculation
     """
@@ -86,22 +82,19 @@ def create_builder_from_file(input_folder, input_file_name, code, metadata, pseu
     builder = PwCalculation.get_builder()
     builder.metadata = metadata
 
-    if isinstance(code, six.string_types):
+    if isinstance(code, str):
         code = Code.get_from_string(code)
     builder.code = code
 
     # read input_file
-    if isinstance(input_folder, six.string_types):
+    if isinstance(input_folder, str):
         input_folder = Folder(input_folder)
 
     with input_folder.open(input_file_name) as input_file:
-        parsed_file = PwInputFile(input_file)
+        parsed_file = PwInputFile(input_file.read())
 
     builder.structure = parsed_file.get_structuredata()
     builder.kpoints = parsed_file.get_kpointsdata()
-
-    if parsed_file.namelists['SYSTEM']['ibrav'] != 0:
-        raise NotImplementedError('Found ibrav != 0: `aiida-quantumespresso` currently only supports ibrav = 0.')
 
     # Then, strip the namelist items that the plugin doesn't allow or sets later.
     # NOTE: If any of the position or cell units are in alat or crystal
@@ -119,7 +112,7 @@ def create_builder_from_file(input_folder, input_file_name, code, metadata, pseu
     pseudos_map = {}
     if pseudo_folder_path is None:
         pseudo_folder_path = input_folder
-    if isinstance(pseudo_folder_path, six.string_types):
+    if isinstance(pseudo_folder_path, str):
         pseudo_folder_path = Folder(pseudo_folder_path)
     names = parsed_file.atomic_species['names']
     pseudo_file_names = parsed_file.atomic_species['pseudo_file_names']
@@ -127,8 +120,9 @@ def create_builder_from_file(input_folder, input_file_name, code, metadata, pseu
     for name, fname in zip(names, pseudo_file_names):
         if fname not in pseudo_file_map:
             local_path = pseudo_folder_path.get_abs_path(fname)
-            upf_node, _ = UpfData.get_or_create(local_path, use_first=use_first, store_upf=False)
-            pseudo_file_map[fname] = upf_node
+            with open(local_path, 'rb') as handle:
+                upf = UpfData(handle)
+            pseudo_file_map[fname] = upf
         pseudos_map[name] = pseudo_file_map[fname]
     builder.pseudos = pseudos_map
 

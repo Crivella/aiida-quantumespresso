@@ -34,8 +34,7 @@ Inputs
 * **pseudo**, class :py:class:`UpfData <aiida.orm.nodes.data.upf.UpfData>`
   One pseudopotential file per atomic species.
 
- If a pseudo potential family is uploaded, the :py:func:`~aiida.orm.nodes.data.upf.get_pseudos_from_structure`
- function can be used to automatically get the mapping of UpfData nodes for each kind in the StructureData one wants to use.
+If a pseudo potential family is uploaded, the `get_pseudos_from_structure()` function can be used to automatically get the mapping of UpfData nodes for each kind in the StructureData one wants to use.
 For example: ::
 
     from aiida.orm.nodes.data.upf import get_pseudos_from_structure
@@ -81,7 +80,6 @@ This can then be used directly in the process builder of for example a ``PwCalcu
     'CONTROL', 'pseudo_dir': pseudopotential directory
     'CONTROL', 'outdir': scratch directory
     'CONTROL', 'prefix': file prefix
-    'SYSTEM', 'ibrav': cell shape
     'SYSTEM', 'celldm': cell dm
     'SYSTEM', 'nat': number of atoms
     'SYSTEM', 'ntyp': number of species
@@ -94,10 +92,17 @@ This can then be used directly in the process builder of for example a ``PwCalcu
 
   Those keywords should not be specified, otherwise the submission will fail.
 
+  The `SYSTEM`, `ibrav` keyword is optional. If it is not specified, `ibrav=0` is used. When a non-zero `ibrav` is given, `aiida-quantumespresso` automatically extracts the cell parameters. As a consistency check, the cell is re-constructed from these parameters and compared to the input cell. The input structure needs to match the convention detailed in the `pw.x documentation`_.
+  The tolerance used in this check can be adjusted with the `IBRAV_CELL_TOLERANCE` key in the `settings` dictionary. It defines the absolute tolerance on each element of the cell matrix.
+
 * **structure**, class :py:class:`StructureData <aiida.orm.nodes.data.structure.StructureData>`
 * **settings**, class :py:class:`Dict <aiida.orm.nodes.data.dict.Dict>` (optional)
   An optional dictionary that activates non-default operations. For a list of possible
   values to pass, see the section on the :ref:`advanced features <pw-advanced-features>`.
+* **parallelization**, class :py:class:`Dict <aiida.orm.nodes.data.dict.Dict>` (optional)
+  An optional dictionary to specify the parallelization flags passed to `pw.x` on the
+  command line. The dictionary maps flag names (type `str`) to their values (type `int`).
+  Allowed flag names are `npool`, `nband`, `ntg`, and `ndiag`.
 * **parent_folder**, class :py:class:`RemoteData <aiida.orm.nodes.data.dict.Dict>` (optional)
   If specified, the scratch folder coming from a previous QE calculation is
   copied in the scratch of the new calculation.
@@ -285,7 +290,7 @@ may want to use the following flag to tell QE to use the gamma-only routines
 (typically twice faster)::
 
     settings_dict = {
-        'gamma_only': False,
+        'gamma_only': True,
     }
 
 Initialization only
@@ -381,17 +386,3 @@ occupations::
 
 Note that for ``pw.x`` to print the required information, the flag ``lda_plus_u`` has to be
 set to ``True`` in the ``SYSTEM`` card of the input ``parameters`` node.
-
-Include deprecated output keys
-..........................
-In version 3 of the plugin, some keys have been deprecated and removed by default
-from the ``output_parameters`` node, often replaced by more appropriate keys.
-To also include the deprecated keys, add ``include_deprecated_v2_keys: True``
-to the ``parser_options`` element of the settings dictionary.
-The default value of this options is ``False``. Example::
-
-    settings_dict = {
-        'parser_options': {
-            'include_deprecated_v2_keys': True,
-        }
-    }

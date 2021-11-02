@@ -35,7 +35,7 @@ All output nodes can be accessed with the ``calculation.out`` method.
 * projections :py:class:`ProjectionData <aiida.orm.nodes.data.array.projection.ProjectionData>`
   Contains the projections which store the orbitals, pdos arrays, and projection arrays.
 
-  * orbitals :py:class:`RealhydrogenOrbital <aiida.common.orbital.realhydrogen.RealhydrogenOrbital>` which can be called using::
+  * orbitals :py:class:`RealhydrogenOrbital <aiida.tools.data.orbital.realhydrogen.RealhydrogenOrbital>` which can be called using::
 
         projection.get_orbitals()
 
@@ -51,7 +51,7 @@ All output nodes can be accessed with the ``calculation.out`` method.
 
         {'angular_momentum': 0,
          'diffusivity': None,
-         'kind_name': u'Ba',
+         'kind_name': 'Ba',
          'magnetic_number': 0,
          'module_name': 'realhydrogen',
          'position': [0.0, 0.0, 0.0],
@@ -79,7 +79,7 @@ All output nodes can be accessed with the ``calculation.out`` method.
 
     .. note:: If you want to quickly find what angular_momentum and magnetic_number is associated with which common orbital name you can
               use the convenience method
-              :py:meth:`get_quantum_numbers_from_name <aiida.common.orbital.realhydrogen.RealhydrogenOrbital.get_quantum_numbers_from_name>`
+              :py:meth:`get_quantum_numbers_from_name <aiida.tools.data.orbital.realhydrogen.RealhydrogenOrbital.get_quantum_numbers_from_name>`
 
     * projections, arrays showing the :math:`<g_i|\psi_{nk}>` projections where :math:`|g_i>` will be associated with a specific orbital and :math:`|\psi_{nk}>` are the bloch waves.
       They can be called using::
@@ -113,8 +113,8 @@ All output nodes can be accessed with the ``calculation.out`` method.
 
   Which will return the tuples (in order)::
 
-    (u'Energy', Energy_array, 'eV')
-    (u'Dos', Dos_array, 'states/eV')
+    ('Energy', Energy_array, 'eV')
+    ('Dos', Dos_array, 'states/eV')
 
   Where the Energy_array is a numpy array given the energy values and the Dos_array is a numpy array giving the Dos values for each energy in the Energy_array.
 
@@ -126,4 +126,3 @@ Errors of the parsing are reported in the log of the calculation (accessible
 with the ``verdi calculation logshow`` command).
 Moreover, they are stored in the Dict under the key ``warnings``, and are
 accessible with ``Calculation.res.warnings``.
-

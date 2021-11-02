@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Tests for the `PhCalculation` class."""
-from __future__ import absolute_import
-
 from aiida import orm
 from aiida.common import datastructures
 from aiida.plugins import CalculationFactory
@@ -13,8 +11,8 @@ PhCalculation = CalculationFactory('quantumespresso.ph')
 
 
 def test_ph_default(
-    aiida_profile, fixture_localhost, fixture_sandbox, generate_calc_job, fixture_code, generate_kpoints_mesh,
-    generate_remote_data, file_regression
+    fixture_localhost, fixture_sandbox, generate_calc_job, fixture_code, generate_kpoints_mesh, generate_remote_data,
+    file_regression
 ):
     """Test a default `PhCalculation`."""
     entry_point_name = 'quantumespresso.ph'
@@ -53,8 +51,8 @@ def test_ph_default(
 
 
 def test_ph_qpoint_list(
-    aiida_profile, fixture_localhost, fixture_sandbox, generate_calc_job, fixture_code, generate_structure,
-    generate_kpoints_mesh, generate_remote_data, file_regression
+    fixture_localhost, fixture_sandbox, generate_calc_job, fixture_code, generate_structure, generate_kpoints_mesh,
+    generate_remote_data, file_regression
 ):
     """Test a `PhCalculation` with a qpoint list instead of a mesh."""
     entry_point_name = 'quantumespresso.ph'

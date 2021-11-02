@@ -1,38 +1,30 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 import numpy as np
-from aiida.parsers import Parser
+
 from aiida.orm import Dict, XyData
-from aiida.common import NotExistent
+
 from aiida_quantumespresso.parsers import QEOutputParsingError
-from aiida_quantumespresso.parsers import parse_raw_out_basic
-from six.moves import range
+from aiida_quantumespresso.parsers.parse_raw.base import parse_output_base
+from .base import Parser
 
 
 class DosParser(Parser):
     """This class is the implementation of the Parser class for Dos."""
-    # deprecated:
-    #_dos_name = 'output_dos'
-    #_units_name = 'output_units'
-
 
     def parse(self, **kwargs):
         """Parses the datafolder, stores results.
 
         Retrieves dos output, and some basic information from the out_file, such as warnings and wall_time
         """
-        try:
-            out_folder = self.retrieved
-        except NotExistent:
-            return self.exit_codes.ERROR_NO_RETRIEVED_FOLDER
+        retrieved = self.retrieved
 
         # Read standard out
         try:
             filename_stdout = self.node.get_option('output_filename')  # or get_attribute(), but this is clearer
-            with out_folder.open(filename_stdout, 'r') as fil:
-                    out_file = fil.readlines()
+            with retrieved.open(filename_stdout, 'r') as fil:
+                out_file = fil.readlines()
         except OSError:
-            return self.exit_codes.ERROR_READING_OUTPUT_FILE
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_READ)
 
         job_done = False
         for i in range(len(out_file)):
@@ -41,27 +33,23 @@ class DosParser(Parser):
                 job_done = True
                 break
         if not job_done:
-            return self.exit_codes.ERROR_JOB_NOT_DONE
+            return self.exit(self.exit_codes.ERROR_OUTPUT_STDOUT_INCOMPLETE)
 
         # check that the dos file is present, if it is, read it
         try:
-            with out_folder.open(self.node.process_class._DOS_FILENAME, 'r') as fil:
-                    dos_file = fil.readlines()
+            with retrieved.open(self.node.process_class._DOS_FILENAME, 'r') as fil:
+                dos_file = fil.readlines()
         except OSError:
-            return self.exit_codes.ERROR_READING_DOS_FILE
+            return self.exit(self.exit_codes.ERROR_READING_DOS_FILE)
 
         # end of initial checks
 
         array_names = [[], []]
         array_units = [[], []]
-        array_names[0] = ['dos_energy', 'dos',
-                          'integrated_dos']  # When spin is not displayed
-        array_names[1] = ['dos_energy', 'dos_spin_up', 'dos_spin_down',
-                          'integrated_dos']  # When spin is displayed
-        array_units[0] = ['eV', 'states/eV',
-                          'states']  # When spin is not displayed
-        array_units[1] = ['eV', 'states/eV', 'states/eV',
-                          'states']  # When spin is displayed
+        array_names[0] = ['dos_energy', 'dos', 'integrated_dos']  # When spin is not displayed
+        array_names[1] = ['dos_energy', 'dos_spin_up', 'dos_spin_down', 'integrated_dos']  # When spin is displayed
+        array_units[0] = ['eV', 'states/eV', 'states']  # When spin is not displayed
+        array_units[1] = ['eV', 'states/eV', 'states/eV', 'states']  # When spin is displayed
 
         # grabs parsed data from aiida.dos
         # TODO: should I catch any QEOutputParsingError from parse_raw_dos,
@@ -72,34 +60,30 @@ class DosParser(Parser):
         dos_units = 'states/eV'
         int_dos_units = 'states'
         xy_data = XyData()
-        xy_data.set_x(array_data['dos_energy'],'dos_energy', energy_units)
+        xy_data.set_x(array_data['dos_energy'], 'dos_energy', energy_units)
         y_arrays = []
         y_names = []
         y_units = []
-        y_arrays  += [array_data['integrated_dos']]
+        y_arrays += [array_data['integrated_dos']]
         y_names += ['integrated_dos']
         y_units += ['states']
         if spin:
-            y_arrays  += [array_data['dos_spin_up']]
-            y_arrays  += [array_data['dos_spin_down']]
+            y_arrays += [array_data['dos_spin_up']]
+            y_arrays += [array_data['dos_spin_down']]
             y_names += ['dos_spin_up']
             y_names += ['dos_spin_down']
-            y_units += ['states/eV']*2
+            y_units += ['states/eV'] * 2
         else:
-            y_arrays  += [array_data['dos']]
+            y_arrays += [array_data['dos']]
             y_names += ['dos']
             y_units += ['states/eV']
-        xy_data.set_y(y_arrays,y_names,y_units)
+        xy_data.set_y(y_arrays, y_names, y_units)
 
-        # grabs the parsed data from aiida.out
-        parsed_data = parse_raw_out_basic(out_file, 'DOS')
-        output_params = Dict(dict=parsed_data)
-        # Adds warnings
-        for message in parsed_data['warnings']:
-            self.logger.error(message)
-        # Create New Nodes
+        parsed_data, logs = parse_output_base(out_file, 'DOS')
+        self.emit_logs(logs)
+
         self.out('output_dos', xy_data)
-        self.out('output_parameters', output_params)
+        self.out('output_parameters', Dict(dict=parsed_data))
 
 
 def parse_raw_dos(dos_file, array_names, array_units):
@@ -129,8 +113,7 @@ def parse_raw_dos(dos_file, array_names, array_units):
     try:
         dos_data = np.genfromtxt(dos_file)
     except ValueError:
-        raise QEOutputParsingError('dosfile could not be loaded '
-        ' using genfromtxt')
+        raise QEOutputParsingError('dosfile could not be loaded using genfromtxt')
     if len(dos_data) == 0:
         raise QEOutputParsingError('Dos file is empty.')
     if np.isnan(dos_data).any():
@@ -148,14 +131,13 @@ def parse_raw_dos(dos_file, array_names, array_units):
         array_units = array_units[1]
         spin = True
     else:
-        raise QEOutputParsingError('Dos file in format that the parser is not '
-                                   'designed to handle.')
+        raise QEOutputParsingError('Dos file in format that the parser is not designed to handle.')
 
     i = 0
     array_data = {}
     array_data['header'] = np.array(dos_header)
     while i < len(array_names):
         array_data[array_names[i]] = dos_data[:, i]
-        array_data[array_names[i]+'_units'] = np.array(array_units[i])
+        array_data[array_names[i] + '_units'] = np.array(array_units[i])
         i += 1
     return array_data, spin

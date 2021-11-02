@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Tests for the `DosParser`."""
-from __future__ import absolute_import
 
 from aiida import orm
 from aiida.common import AttributeDict
@@ -11,9 +10,7 @@ def generate_inputs():
     return AttributeDict()
 
 
-def test_dos_default(
-    aiida_profile, fixture_localhost, generate_calc_job_node, generate_parser, data_regression, num_regression
-):
+def test_dos_default(fixture_localhost, generate_calc_job_node, generate_parser, data_regression, num_regression):
     """Test `DosParser` on the results of a simple `dos.x` calculation."""
     entry_point_calc_job = 'quantumespresso.dos'
     entry_point_parser = 'quantumespresso.dos'
@@ -41,5 +38,18 @@ def test_dos_default(
             'units': dos_units,
         }
     })
-    num_regression.check({'dos_val_{}'.format(i): val for i, val in enumerate(dos_values)},
+    num_regression.check({f'dos_val_{i}': val for i, val in enumerate(dos_values)},
                          default_tolerance=dict(atol=0, rtol=1e-18))
+
+
+def test_dos_failed_interrupted(fixture_localhost, generate_calc_job_node, generate_parser):
+    """Test `DosParser` on the results of a `dos.x` calculation that was interrupted abruptly."""
+    entry_point_calc_job = 'quantumespresso.dos'
+    entry_point_parser = 'quantumespresso.dos'
+
+    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, 'failed_interrupted', generate_inputs())
+    parser = generate_parser(entry_point_parser)
+    _, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    assert calcfunction.is_failed
+    assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_OUTPUT_STDOUT_INCOMPLETE.status

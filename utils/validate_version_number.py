@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """Pre-commit script to ensure that version numbers in `setup.json` and `aiida_quantumespresso/__init__.py` match."""
-from __future__ import absolute_import
 import os
 import json
 import sys
@@ -38,9 +37,9 @@ def validate_version():
 
     if version != setup_content['version']:
         click.echo('Version number mismatch detected:')
-        click.echo("Version number in '{}': {}".format(FILENAME_SETUP_JSON, setup_content['version']))
-        click.echo("Version number in '{}/__init__.py': {}".format('aiida_quantumespresso', version))
-        click.echo("Updating version in '{}' to: {}".format(FILENAME_SETUP_JSON, version))
+        click.echo(f"Version number in '{FILENAME_SETUP_JSON}': {setup_content['version']}")
+        click.echo(f"Version number in 'aiida_quantumespresso/__init__.py': {version}")
+        click.echo(f"Updating version in '{FILENAME_SETUP_JSON}' to: {version}")
 
         setup_content['version'] = version
         with open(FILEPATH_SETUP_JSON, 'w') as handle:

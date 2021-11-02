@@ -17,7 +17,7 @@ The input file that we should create is more or less this one::
   &INPUTPH
      epsil = .true.
      fildyn = 'DYN_MAT/dynamical-matrix-'
-     iverbosity = 1
+     verbosity = 'high'
      ldisp = .true.
      nq1 = 1
      nq2 = 1
@@ -88,7 +88,7 @@ As for ``pw.x``, we simply do::
 
 and we set the parameters of the scheduler
 (and just like the PWscf, this is a configuration valid
-for the PBSpro and slurm schedulers only, see :ref:`my-reference-to-scheduler`).
+for the PBSpro and slurm schedulers only, see :ref:`aiida:topics:schedulers`).
 
 ::
 
@@ -197,5 +197,3 @@ Exception tolerant code
 You can find a more sophisticated example, that checks the possible exceptions
 and prints nice error messages inside your AiiDA folder, under
 ``examples/submission/quantumespresso/test_ph.py``.
-
-

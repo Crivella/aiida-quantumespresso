@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Plugin to create a Quantum Espresso pw.x file.
+"""Plugin to create a Quantum Espresso cp.x file.
 
 TODO: COPY OUTDIR FROM PREVIOUS CALCULATION! Should be an input node of type
      RemoteData (or maybe subclass it?).
@@ -14,29 +14,32 @@ TODO: implement pre_... and post_... hooks to add arbitrary strings before
       for development when new cards are needed
 TODO: all a lot of logger.debug stuff
 """
-from __future__ import absolute_import
-
 import os
 
-import six
 from aiida import orm
 from aiida.common.lang import classproperty
-from aiida.engine import CalcJob
+from aiida.common import exceptions
 
 from aiida_quantumespresso.calculations import BasePwCpInputGenerator
 
 
-class CpCalculation(BasePwCpInputGenerator, CalcJob):
+class CpCalculation(BasePwCpInputGenerator):
     """`CalcJob` implementation for the cp.x code of Quantum ESPRESSO."""
 
     # Constants to use in the calculation
     _CP_READ_UNIT_NUMBER = 50
     _CP_WRITE_UNIT_NUMBER = 51
     _FILE_XML_PRINT_COUNTER_BASENAME = 'print_counter.xml'
+    _FILE_PRINT_COUNTER_BASENAME = 'print_counter'
     _FILE_XML_PRINT_COUNTER = os.path.join(
         BasePwCpInputGenerator._OUTPUT_SUBFOLDER,
-        '{}_{}.save'.format(BasePwCpInputGenerator._PREFIX, _CP_WRITE_UNIT_NUMBER),
+        f'{BasePwCpInputGenerator._PREFIX}_{_CP_WRITE_UNIT_NUMBER}.save',
         _FILE_XML_PRINT_COUNTER_BASENAME,
+    )
+    _FILE_PRINT_COUNTER = os.path.join(
+        BasePwCpInputGenerator._OUTPUT_SUBFOLDER,
+        f'{BasePwCpInputGenerator._PREFIX}_{_CP_WRITE_UNIT_NUMBER}.save',
+        _FILE_PRINT_COUNTER_BASENAME,
     )
 
     # Input file "sections" that we are going to write by calculation type
@@ -56,7 +59,6 @@ class CpCalculation(BasePwCpInputGenerator, CalcJob):
         ('CONTROL', 'pseudo_dir'),  # set later
         ('CONTROL', 'outdir'),  # set later
         ('CONTROL', 'prefix'),  # set later
-        ('SYSTEM', 'ibrav'),  # set later
         ('SYSTEM', 'celldm'),
         ('SYSTEM', 'nat'),  # set later
         ('SYSTEM', 'ntyp'),  # set later
@@ -95,32 +97,32 @@ class CpCalculation(BasePwCpInputGenerator, CalcJob):
     _internal_retrieve_list = [
         os.path.join(
             BasePwCpInputGenerator._OUTPUT_SUBFOLDER,
-            '{}.{}'.format(BasePwCpInputGenerator._PREFIX, ext),
+            f'{BasePwCpInputGenerator._PREFIX}.{ext}',
         ) for ext in _cp_ext_list
-    ] + [_FILE_XML_PRINT_COUNTER]
+    ] + [_FILE_XML_PRINT_COUNTER, _FILE_PRINT_COUNTER]
 
     # in restarts, it will copy from the parent the following
     _restart_copy_from = os.path.join(
         BasePwCpInputGenerator._OUTPUT_SUBFOLDER,
-        '{}_{}.save'.format(BasePwCpInputGenerator._PREFIX, _CP_WRITE_UNIT_NUMBER),
+        f'{BasePwCpInputGenerator._PREFIX}_{_CP_WRITE_UNIT_NUMBER}.save',
     )
 
     # in restarts, it will copy the previous folder in the following one
     _restart_copy_to = os.path.join(
         BasePwCpInputGenerator._OUTPUT_SUBFOLDER,
-        '{}_{}.save'.format(BasePwCpInputGenerator._PREFIX, _CP_READ_UNIT_NUMBER),
+        f'{BasePwCpInputGenerator._PREFIX}_{_CP_READ_UNIT_NUMBER}.save',
     )
 
     @classproperty
     def xml_filepaths(cls):
-        """Returns a list of relative filepaths of XML files."""
+        """Return a list of relative filepaths of XML files."""
         # pylint: disable=no-self-argument,not-an-iterable
         filepaths = []
 
         for filename in cls.xml_filenames:
             filepath = os.path.join(
                 cls._OUTPUT_SUBFOLDER,
-                '{}_{}.save'.format(cls._PREFIX, cls._CP_WRITE_UNIT_NUMBER),
+                f'{cls._PREFIX}_{cls._CP_WRITE_UNIT_NUMBER}.save',
                 filename,
             )
             filepaths.append(filepath)
@@ -129,26 +131,64 @@ class CpCalculation(BasePwCpInputGenerator, CalcJob):
 
     @classmethod
     def define(cls, spec):
-        super(CpCalculation, cls).define(spec)  # noqa: D102 # yapf: disable
-        spec.input('metadata.options.parser_name', valid_type=six.string_types, default='quantumespresso.cp')
+        """Define the process specification."""
+        # yapf: disable
+        super().define(spec)
+        spec.input('metadata.options.parser_name', valid_type=str, default='quantumespresso.cp')
         spec.output('output_trajectory', valid_type=orm.TrajectoryData)
         spec.output('output_parameters', valid_type=orm.Dict)
         spec.default_output_node = 'output_parameters'
 
-        spec.exit_code(
-            100, 'ERROR_NO_RETRIEVED_FOLDER', message='The retrieved folder data node could not be accessed.'
-        )
-        spec.exit_code(
-            101, 'ERROR_NO_RETRIEVED_TEMPORARY_FOLDER', message='The retrieved temporary folder could not be accessed.'
-        )
-        spec.exit_code(
-            110, 'ERROR_READING_OUTPUT_FILE', message='The output file could not be read from the retrieved folder.'
-        )
-        spec.exit_code(
-            115, 'ERROR_MISSING_XML_FILE', message='The required XML file is not present in the retrieved folder.'
-        )
-        spec.exit_code(116, 'ERROR_MULTIPLE_XML_FILES', message='The retrieved folder contains multiple XML files.')
-        spec.exit_code(117, 'ERROR_READING_XML_FILE', message='The required XML file could not be read.')
-        spec.exit_code(118, 'ERROR_READING_POS_FILE', message='The required POS file could not be read.')
-        spec.exit_code(119, 'ERROR_READING_TRAJECTORY_DATA', message='The required trajectory data could not be read.')
-        spec.exit_code(120, 'ERROR_INVALID_OUTPUT', message='The output file contains invalid output.')
+        spec.exit_code(301, 'ERROR_NO_RETRIEVED_TEMPORARY_FOLDER',
+            message='The retrieved temporary folder could not be accessed.')
+        spec.exit_code(303, 'ERROR_MISSING_XML_FILE',
+            message='The required XML file is not present in the retrieved folder.')
+        spec.exit_code(304, 'ERROR_OUTPUT_XML_MULTIPLE',
+            message='The retrieved folder contains multiple XML files.')
+        spec.exit_code(310, 'ERROR_OUTPUT_STDOUT_READ',
+            message='The stdout output file could not be read.')
+        spec.exit_code(311, 'ERROR_OUTPUT_STDOUT_PARSE',
+            message='The output file contains invalid output.')
+        spec.exit_code(312, 'ERROR_OUTPUT_STDOUT_INCOMPLETE',
+            message='The stdout output file was incomplete probably because the calculation got interrupted.')
+        spec.exit_code(320, 'ERROR_OUTPUT_XML_READ',
+            message='The required XML file could not be read.')
+        spec.exit_code(330, 'ERROR_READING_POS_FILE',
+            message='The required POS file could not be read.')
+        spec.exit_code(340, 'ERROR_READING_TRAJECTORY_DATA',
+            message='The required trajectory data could not be read.')
+        # yapf: enable
+
+    @staticmethod
+    def _generate_PWCP_input_tail(*args, **kwargs):
+        """Parse CP specific input parameters."""
+        settings = kwargs['settings']
+
+        # AUTOPILOT
+        autopilot = settings.pop('AUTOPILOT', [])
+
+        if not autopilot:
+            return ''
+
+        autopilot_card = 'AUTOPILOT\n'
+
+        try:
+            for event in autopilot:
+                if isinstance(event['newvalue'], str):
+                    autopilot_card += f"ON_STEP = {event['onstep']} : '{event['what']}' = {event['newvalue']}\n"
+                else:
+                    autopilot_card += f"ON_STEP = {event['onstep']} : {event['what']} = {event['newvalue']}\n"
+        except KeyError as exception:
+            raise exceptions.InputValidationError(
+                f"""AUTOPILOT input: you must specify a list of dictionaries like the following:
+                 [
+                    {{'onstep' : 10, 'what' : 'dt', 'newvalue' : 5.0 }},
+                    {{'onstep' : 20, 'what' : 'whatever', 'newvalue' : 'pippo'}}
+                 ]
+                 You specified {autopilot}
+                 """
+            ) from exception
+
+        autopilot_card += 'ENDRULES\n'
+
+        return autopilot_card

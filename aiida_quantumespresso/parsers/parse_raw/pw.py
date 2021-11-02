@@ -5,16 +5,13 @@ The function that needs to be called from outside is parse_raw_output(). The fun
 specific functionalities. The parsing will try to convert whatever it can in some dictionary, which by operative
 decision doesn't have much structure encoded, [the values are simple ]
 """
-from __future__ import absolute_import
-from __future__ import print_function
-
 import re
 import numpy
-from six.moves import range, zip
+from qe_tools import CONSTANTS
 
 from aiida_quantumespresso.parsers import QEOutputParsingError
+from aiida_quantumespresso.parsers.parse_raw import convert_qe_time_to_sec
 from aiida_quantumespresso.utils.mapping import get_logging_container
-from qe_tools.constants import ry_to_ev, bohr_to_ang, ry_si, bohr_si
 
 lattice_tolerance = 1.e-5
 units_suffix = '_units'
@@ -102,7 +99,7 @@ def reduce_symmetries(parsed_parameters, parsed_structure, logger):
                             break
                     else:
                         index = None
-                        logger.error('Symmetry {} not found'.format(name))
+                        logger.error(f'Symmetry {name} not found')
 
                     new_dict = {}
                     if index is not None:
@@ -116,8 +113,11 @@ def reduce_symmetries(parsed_parameters, parsed_structure, logger):
 
                         inversion = possible_symmetries[index]['inversion']
                         if not are_matrices_equal(rotation_cart_old, rotation_cart_new, swap_sign_matrix_b=inversion):
-                            logger.error('Mapped rotation matrix {} does not match the original rotation {}'
-                                .format(rotation_cart_new, rotation_cart_old))
+                            logger.error(
+                                'Mapped rotation matrix {} does not match the original rotation {}'.format(
+                                    rotation_cart_new, rotation_cart_old
+                                )
+                            )
                             new_dict['all_symmetries'] = this_sym
                         else:
                             # Note: here I lose the information about equivalent ions and fractional_translation
@@ -131,11 +131,11 @@ def reduce_symmetries(parsed_parameters, parsed_structure, logger):
 
                 parsed_parameters[symmetry_type] = new_symmetries  # and overwrite the old one
             except KeyError:
-                logger.warning("key '{}' is not present in raw output dictionary".format(symmetry_type))
+                logger.warning(f"key '{symmetry_type}' is not present in raw output dictionary")
         else:
             # backwards-compatiblity: 'lattice_symmetries' is not created in older versions of the parser
             if symmetry_type != 'lattice_symmetries':
-                logger.warning("key '{}' is not present in raw output dictionary".format(symmetry_type))
+                logger.warning(f"key '{symmetry_type}' is not present in raw output dictionary")
 
 
 def get_symmetry_mapping():
@@ -188,70 +188,38 @@ def get_symmetry_mapping():
 
     # Names for the 32 matrices, with and without inversion
     matrices_name = [
-        'identity                                     ',
-        '180 deg rotation - cart. axis [0,0,1]        ',
-        '180 deg rotation - cart. axis [0,1,0]        ',
-        '180 deg rotation - cart. axis [1,0,0]        ',
-        '180 deg rotation - cart. axis [1,1,0]        ',
-        '180 deg rotation - cart. axis [1,-1,0]       ',
-        ' 90 deg rotation - cart. axis [0,0,-1]       ',
-        ' 90 deg rotation - cart. axis [0,0,1]        ',
-        '180 deg rotation - cart. axis [1,0,1]        ',
-        '180 deg rotation - cart. axis [-1,0,1]       ',
-        ' 90 deg rotation - cart. axis [0,1,0]        ',
-        ' 90 deg rotation - cart. axis [0,-1,0]       ',
-        '180 deg rotation - cart. axis [0,1,1]        ',
-        '180 deg rotation - cart. axis [0,1,-1]       ',
-        ' 90 deg rotation - cart. axis [-1,0,0]       ',
-        ' 90 deg rotation - cart. axis [1,0,0]        ',
-        '120 deg rotation - cart. axis [-1,-1,-1]     ',
-        '120 deg rotation - cart. axis [-1,1,1]       ',
-        '120 deg rotation - cart. axis [1,1,-1]       ',
-        '120 deg rotation - cart. axis [1,-1,1]       ',
-        '120 deg rotation - cart. axis [1,1,1]        ',
-        '120 deg rotation - cart. axis [-1,1,-1]      ',
-        '120 deg rotation - cart. axis [1,-1,-1]      ',
-        '120 deg rotation - cart. axis [-1,-1,1]      ',
-        ' 60 deg rotation - cryst. axis [0,0,1]       ',
-        ' 60 deg rotation - cryst. axis [0,0,-1]      ',
-        '120 deg rotation - cryst. axis [0,0,1]       ',
-        '120 deg rotation - cryst. axis [0,0,-1]      ',
-        '180 deg rotation - cryst. axis [1,-1,0]      ',
-        '180 deg rotation - cryst. axis [2,1,0]       ',
-        '180 deg rotation - cryst. axis [0,1,0]       ',
-        '180 deg rotation - cryst. axis [1,1,0]       ',
-        'inversion                                    ',
-        'inv. 180 deg rotation - cart. axis [0,0,1]   ',
-        'inv. 180 deg rotation - cart. axis [0,1,0]   ',
-        'inv. 180 deg rotation - cart. axis [1,0,0]   ',
-        'inv. 180 deg rotation - cart. axis [1,1,0]   ',
-        'inv. 180 deg rotation - cart. axis [1,-1,0]  ',
-        'inv.  90 deg rotation - cart. axis [0,0,-1]  ',
-        'inv.  90 deg rotation - cart. axis [0,0,1]   ',
-        'inv. 180 deg rotation - cart. axis [1,0,1]   ',
-        'inv. 180 deg rotation - cart. axis [-1,0,1]  ',
-        'inv.  90 deg rotation - cart. axis [0,1,0]   ',
-        'inv.  90 deg rotation - cart. axis [0,-1,0]  ',
-        'inv. 180 deg rotation - cart. axis [0,1,1]   ',
-        'inv. 180 deg rotation - cart. axis [0,1,-1]  ',
-        'inv.  90 deg rotation - cart. axis [-1,0,0]  ',
-        'inv.  90 deg rotation - cart. axis [1,0,0]   ',
-        'inv. 120 deg rotation - cart. axis [-1,-1,-1]',
-        'inv. 120 deg rotation - cart. axis [-1,1,1]  ',
-        'inv. 120 deg rotation - cart. axis [1,1,-1]  ',
-        'inv. 120 deg rotation - cart. axis [1,-1,1]  ',
-        'inv. 120 deg rotation - cart. axis [1,1,1]   ',
-        'inv. 120 deg rotation - cart. axis [-1,1,-1] ',
-        'inv. 120 deg rotation - cart. axis [1,-1,-1] ',
-        'inv. 120 deg rotation - cart. axis [-1,-1,1] ',
-        'inv.  60 deg rotation - cryst. axis [0,0,1]  ',
-        'inv.  60 deg rotation - cryst. axis [0,0,-1] ',
-        'inv. 120 deg rotation - cryst. axis [0,0,1]  ',
-        'inv. 120 deg rotation - cryst. axis [0,0,-1] ',
-        'inv. 180 deg rotation - cryst. axis [1,-1,0] ',
-        'inv. 180 deg rotation - cryst. axis [2,1,0]  ',
-        'inv. 180 deg rotation - cryst. axis [0,1,0]  ',
-        'inv. 180 deg rotation - cryst. axis [1,1,0]  '
+        'identity                                     ', '180 deg rotation - cart. axis [0,0,1]        ',
+        '180 deg rotation - cart. axis [0,1,0]        ', '180 deg rotation - cart. axis [1,0,0]        ',
+        '180 deg rotation - cart. axis [1,1,0]        ', '180 deg rotation - cart. axis [1,-1,0]       ',
+        ' 90 deg rotation - cart. axis [0,0,-1]       ', ' 90 deg rotation - cart. axis [0,0,1]        ',
+        '180 deg rotation - cart. axis [1,0,1]        ', '180 deg rotation - cart. axis [-1,0,1]       ',
+        ' 90 deg rotation - cart. axis [0,1,0]        ', ' 90 deg rotation - cart. axis [0,-1,0]       ',
+        '180 deg rotation - cart. axis [0,1,1]        ', '180 deg rotation - cart. axis [0,1,-1]       ',
+        ' 90 deg rotation - cart. axis [-1,0,0]       ', ' 90 deg rotation - cart. axis [1,0,0]        ',
+        '120 deg rotation - cart. axis [-1,-1,-1]     ', '120 deg rotation - cart. axis [-1,1,1]       ',
+        '120 deg rotation - cart. axis [1,1,-1]       ', '120 deg rotation - cart. axis [1,-1,1]       ',
+        '120 deg rotation - cart. axis [1,1,1]        ', '120 deg rotation - cart. axis [-1,1,-1]      ',
+        '120 deg rotation - cart. axis [1,-1,-1]      ', '120 deg rotation - cart. axis [-1,-1,1]      ',
+        ' 60 deg rotation - cryst. axis [0,0,1]       ', ' 60 deg rotation - cryst. axis [0,0,-1]      ',
+        '120 deg rotation - cryst. axis [0,0,1]       ', '120 deg rotation - cryst. axis [0,0,-1]      ',
+        '180 deg rotation - cryst. axis [1,-1,0]      ', '180 deg rotation - cryst. axis [2,1,0]       ',
+        '180 deg rotation - cryst. axis [0,1,0]       ', '180 deg rotation - cryst. axis [1,1,0]       ',
+        'inversion                                    ', 'inv. 180 deg rotation - cart. axis [0,0,1]   ',
+        'inv. 180 deg rotation - cart. axis [0,1,0]   ', 'inv. 180 deg rotation - cart. axis [1,0,0]   ',
+        'inv. 180 deg rotation - cart. axis [1,1,0]   ', 'inv. 180 deg rotation - cart. axis [1,-1,0]  ',
+        'inv.  90 deg rotation - cart. axis [0,0,-1]  ', 'inv.  90 deg rotation - cart. axis [0,0,1]   ',
+        'inv. 180 deg rotation - cart. axis [1,0,1]   ', 'inv. 180 deg rotation - cart. axis [-1,0,1]  ',
+        'inv.  90 deg rotation - cart. axis [0,1,0]   ', 'inv.  90 deg rotation - cart. axis [0,-1,0]  ',
+        'inv. 180 deg rotation - cart. axis [0,1,1]   ', 'inv. 180 deg rotation - cart. axis [0,1,-1]  ',
+        'inv.  90 deg rotation - cart. axis [-1,0,0]  ', 'inv.  90 deg rotation - cart. axis [1,0,0]   ',
+        'inv. 120 deg rotation - cart. axis [-1,-1,-1]', 'inv. 120 deg rotation - cart. axis [-1,1,1]  ',
+        'inv. 120 deg rotation - cart. axis [1,1,-1]  ', 'inv. 120 deg rotation - cart. axis [1,-1,1]  ',
+        'inv. 120 deg rotation - cart. axis [1,1,1]   ', 'inv. 120 deg rotation - cart. axis [-1,1,-1] ',
+        'inv. 120 deg rotation - cart. axis [1,-1,-1] ', 'inv. 120 deg rotation - cart. axis [-1,-1,1] ',
+        'inv.  60 deg rotation - cryst. axis [0,0,1]  ', 'inv.  60 deg rotation - cryst. axis [0,0,-1] ',
+        'inv. 120 deg rotation - cryst. axis [0,0,1]  ', 'inv. 120 deg rotation - cryst. axis [0,0,-1] ',
+        'inv. 180 deg rotation - cryst. axis [1,-1,0] ', 'inv. 180 deg rotation - cryst. axis [2,1,0]  ',
+        'inv. 180 deg rotation - cryst. axis [0,1,0]  ', 'inv. 180 deg rotation - cryst. axis [1,1,0]  '
     ]
 
     rotations = []
@@ -275,8 +243,10 @@ def detect_important_message(logs, line):
             'problems computing cholesky': 'ERROR_DIAGONALIZATION_CHOLESKY_DECOMPOSITION',
             'charge is wrong': 'ERROR_CHARGE_IS_WRONG',
             'not orthogonal operation': 'ERROR_SYMMETRY_NON_ORTHOGONAL_OPERATION',
+            'problems computing cholesky': 'ERROR_COMPUTING_CHOLESKY',
             'dexx is negative': 'ERROR_DEXX_IS_NEGATIVE',
             'some nodes have no k-points': 'ERROR_NPOOLS_TOO_HIGH',
+            'too many bands are not converged': 'ERROR_DIAGONALIZATION_TOO_MANY_BANDS_NOT_CONVERGED',
         },
         'warning': {
             'Warning:': None,
@@ -361,14 +331,12 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                         # QE counts twice each k-point in spin-polarized calculations
                         nk /= 2
                 elif 'Dense  grid' in line:
-                    FFT_grid = [int(g) for g in
-                                line.split('(')[1].split(')')[0].split(',')]
+                    FFT_grid = [int(g) for g in line.split('(')[1].split(')')[0].split(',')]
                 elif 'Smooth grid' in line:
-                    smooth_FFT_grid = [int(g) for g in
-                                       line.split('(')[1].split(')')[0].split(',')]
+                    smooth_FFT_grid = [int(g) for g in line.split('(')[1].split(')')[0].split(',')]
                     break
-            alat *= bohr_to_ang
-            volume *= bohr_to_ang**3
+            alat *= CONSTANTS.bohr_to_ang
+            volume *= CONSTANTS.bohr_to_ang**3
             parsed_data['lattice_parameter_initial'] = alat
             parsed_data['number_of_bands'] = nbnd
             try:
@@ -415,15 +383,14 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
         detect_important_message(logs, line)
 
         # to be used for later
-        if 'Carrying out vdW-DF run using the following parameters:' in line:
+        if 'Non-local correlation energy' in line:
             vdw_correction = True
 
         elif 'Cartesian axes' in line:
             # this is the part when initial positions and chemical
             # symbols are printed (they do not change during a run)
             i = count + 1
-            while i < count + 10 and not('site n.' in data_lines[i] and
-                                      'atom' in data_lines[i]):
+            while i < count + 10 and not ('site n.' in data_lines[i] and 'atom' in data_lines[i]):
                 i += 1
             if 'site n.' in data_lines[i] and 'atom' in data_lines[i]:
                 trajectory_data['atomic_species_name'] = [data_lines[i + 1 + j].split()[1] for j in range(nat)]
@@ -440,7 +407,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
             if match:
                 try:
                     parsed_data['estimated_ram_per_process'] = float(match.group(1))
-                    parsed_data['estimated_ram_per_process{}'.format(units_suffix)] = match.group(4)
+                    parsed_data[f'estimated_ram_per_process{units_suffix}'] = match.group(4)
                 except (IndexError, ValueError):
                     pass
 
@@ -451,7 +418,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
             if match:
                 try:
                     parsed_data['estimated_ram_total'] = float(match.group(1))
-                    parsed_data['estimated_ram_total{}'.format(units_suffix)] = match.group(4)
+                    parsed_data[f'estimated_ram_total{units_suffix}'] = match.group(4)
                 except (IndexError, ValueError):
                     pass
 
@@ -498,7 +465,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                     parsed_data['pointgroup_schoenflies'] = pg_schoenflies
 
                 except Exception:
-                    warning = 'Problem parsing point group, I found: {}'.format(line.strip())
+                    warning = f'Problem parsing point group, I found: {line.strip()}'
                     logs.warning.append(warning)
 
         # special parsing of c_bands error
@@ -543,22 +510,24 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                     # try except indexerror for not enough lines
                     lattice = line.split('(')[1].split(')')[0].split('=')
                     if lattice[0].lower() not in ['alat', 'bohr', 'angstrom']:
-                        raise QEOutputParsingError('Error while parsing cell_parameters: ' +
-                                                   'unsupported units {}'.format(lattice[0]))
+                        raise QEOutputParsingError(
+                            'Error while parsing cell_parameters: ' + f'unsupported units {lattice[0]}'
+                        )
 
                     if 'alat' in lattice[0].lower():
-                        a1 = [alat * bohr_to_ang * float(s) for s in a1]
-                        a2 = [alat * bohr_to_ang * float(s) for s in a2]
-                        a3 = [alat * bohr_to_ang * float(s) for s in a3]
+                        a1 = [alat * CONSTANTS.bohr_to_ang * float(s) for s in a1]
+                        a2 = [alat * CONSTANTS.bohr_to_ang * float(s) for s in a2]
+                        a3 = [alat * CONSTANTS.bohr_to_ang * float(s) for s in a3]
                         lattice_parameter_b = float(lattice[1])
                         if abs(lattice_parameter_b - alat) > lattice_tolerance:
-                            raise QEOutputParsingError('Lattice parameters mismatch! ' +
-                                                       '{} vs {}'.format(lattice_parameter_b, alat))
+                            raise QEOutputParsingError(
+                                'Lattice parameters mismatch! ' + f'{lattice_parameter_b} vs {alat}'
+                            )
                     elif 'bohr' in lattice[0].lower():
-                        lattice_parameter_b *= bohr_to_ang
-                        a1 = [bohr_to_ang * float(s) for s in a1]
-                        a2 = [bohr_to_ang * float(s) for s in a2]
-                        a3 = [bohr_to_ang * float(s) for s in a3]
+                        lattice_parameter_b *= CONSTANTS.bohr_to_ang
+                        a1 = [CONSTANTS.bohr_to_ang * float(s) for s in a1]
+                        a2 = [CONSTANTS.bohr_to_ang * float(s) for s in a2]
+                        a3 = [CONSTANTS.bohr_to_ang * float(s) for s in a3]
                     trajectory_data.setdefault('lattice_vectors_relax', []).append([a1, a2, a3])
 
                 except Exception:
@@ -582,9 +551,9 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                         if metric == 'alat':
                             tau = [alat * float(s) for s in tau]
                         elif metric == 'bohr':
-                            tau = [bohr_to_ang * float(s) for s in tau]
+                            tau = [CONSTANTS.bohr_to_ang * float(s) for s in tau]
                         positions.append(tau)
-                    trajectory_data.setdefault(this_key,[]).append(positions)
+                    trajectory_data.setdefault(this_key, []).append(positions)
                 except Exception:
                     logs.warning.append('Error while parsing relaxation atomic positions.')
 
@@ -600,7 +569,9 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                 try:
                     units = line2.split()[-1]
                     if default_dipole_units.lower() not in units.lower():  # only debye
-                        raise QEOutputParsingError('Error parsing the dipole correction. Units {} are not supported.'.format(units))
+                        raise QEOutputParsingError(
+                            f'Error parsing the dipole correction. Units {units} are not supported.'
+                        )
                     value = float(line2.split()[-2])
                 except IndexError:  # on units
                     pass
@@ -620,7 +591,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
             # If for some step this line is not printed, the later check with the scf_accuracy array length should catch it
             elif 'estimated scf accuracy' in line:
                 try:
-                    value = float(line.split()[-2])* ry_to_ev
+                    value = float(line.split()[-2]) * CONSTANTS.ry_to_ev
                     trajectory_data.setdefault('scf_accuracy', []).append(value)
                 except Exception:
                     logs.warning.append('Error while parsing scf accuracy.')
@@ -671,6 +642,10 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                         if 'atom:' in line2:
                             mag_moments.append(float(line2.split('magn:')[1].split()[0]))
                             charges.append(float(line2.split('charge:')[1].split()[0]))
+                        # Alternate parsing for new format introduced in v6.8
+                        elif 'atom' in line2:
+                            mag_moments.append(float(line2.split('magn=')[1].split()[0]))
+                            charges.append(float(line2.split('charge=')[1].split()[0]))
                         if len(mag_moments) == nat:
                             break
                     trajectory_data.setdefault('atomic_magnetic_moments', []).append(mag_moments)
@@ -684,8 +659,22 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
             elif '!' in line:
                 try:
 
-                    En = float(line.split('=')[1].split('Ry')[0]) * ry_to_ev
-                    E_acc = float(data_step[count + 2].split('<')[1].split('Ry')[0]) * ry_to_ev
+                    En = float(line.split('=')[1].split('Ry')[0]) * CONSTANTS.ry_to_ev
+
+                    # Up till v6.5, the line after total energy would be the Harris-Foulkes estimate, followed by the
+                    # estimated SCF accuracy. However, pw.x v6.6 removed the HF estimate line.
+                    marker = 'estimated scf accuracy'
+                    for i in range(5):
+                        subline = data_step[count + i]
+                        if marker in subline:
+                            try:
+                                E_acc = float(subline.split('<')[1].split('Ry')[0]) * CONSTANTS.ry_to_ev
+                            except Exception:
+                                pass
+                            else:
+                                break
+                    else:
+                        raise KeyError(f'could not find and parse the line with `{marker}`')
 
                     for key, value in [['energy', En], ['energy_accuracy', E_acc]]:
                         trajectory_data.setdefault(key, []).append(value)
@@ -697,22 +686,23 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                         line2 = data_step[count + j]
 
                         for string, key in [
-                                ['one-electron contribution', 'energy_one_electron'],
-                                ['hartree contribution', 'energy_hartree'],
-                                ['xc contribution', 'energy_xc'],
-                                ['ewald contribution', 'energy_ewald'],
-                                ['smearing contrib.', 'energy_smearing'],
-                                ['one-center paw contrib.', 'energy_one_center_paw'],
-                                ['est. exchange err', 'energy_est_exchange'],
-                                ['Fock energy', 'energy_fock'],
-                                ['Hubbard energy', 'energy_hubbard'],
-                                # Add also ENVIRON specific contribution to the total energy
-                                ['solvation energy', 'energy_solvation'],
-                                ['cavitation energy', 'energy_cavitation'],
-                                ['PV energy', 'energy_pv'],
-                                ['periodic energy correct.', 'energy_pbc_correction'],
-                                ['ionic charge energy', 'energy_ionic_charge'],
-                                ['external charges energy', 'energy_external_charges']]:
+                            ['one-electron contribution', 'energy_one_electron'],
+                            ['hartree contribution', 'energy_hartree'],
+                            ['xc contribution', 'energy_xc'],
+                            ['ewald contribution', 'energy_ewald'],
+                            ['smearing contrib.', 'energy_smearing'],
+                            ['one-center paw contrib.', 'energy_one_center_paw'],
+                            ['est. exchange err', 'energy_est_exchange'],
+                            ['Fock energy', 'energy_fock'],
+                            ['Hubbard energy', 'energy_hubbard'],
+                            # Add also ENVIRON specific contribution to the total energy
+                            ['solvation energy', 'energy_solvation'],
+                            ['cavitation energy', 'energy_cavitation'],
+                            ['PV energy', 'energy_pv'],
+                            ['periodic energy correct.', 'energy_pbc_correction'],
+                            ['ionic charge energy', 'energy_ionic_charge'],
+                            ['external charges energy', 'energy_external_charges']
+                        ]:
                             if string in line2:
                                 value = grep_energy_from_line(line2)
                                 trajectory_data.setdefault(key, []).append(value)
@@ -745,7 +735,10 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                                 trajectory_data.setdefault('energy_vdw', []).append(value)
                                 break
                         parsed_data['energy_vdw' + units_suffix] = default_energy_units
-                except Exception:
+                except Exception as exception:
+                    import traceback
+                    traceback.print_exc()
+                    print(exception)
                     logs.warning.append('Error while parsing for energy terms.')
 
             elif 'the Fermi energy is' in line:
@@ -766,7 +759,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                         if 'atom ' in line2:
                             line2 = line2.split('=')[1].split()
                             # CONVERT FORCES IN eV/Ang
-                            vec = [float(s) * ry_to_ev / bohr_to_ang for s in line2]
+                            vec = [float(s) * CONSTANTS.ry_to_ev / CONSTANTS.bohr_to_ang for s in line2]
                             forces.append(vec)
                         if len(forces) == nat:
                             break
@@ -779,28 +772,37 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
 
             elif 'Total force =' in line:
                 try:  # note that I can't check the units: not written in output!
-                    value = float(line.split('=')[1].split('Total')[0]) * ry_to_ev / bohr_to_ang
+                    value = float(line.split('=')[1].split('Total')[0]) * CONSTANTS.ry_to_ev / CONSTANTS.bohr_to_ang
                     trajectory_data.setdefault('total_force', []).append(value)
                     parsed_data['total_force' + units_suffix] = default_force_units
                 except Exception:
                     logs.warning.append('Error while parsing total force.')
 
-            elif ('entering subroutine stress ...' in line) or ('Computing stress (Cartesian axis) and pressure' in line):
+            elif ('entering subroutine stress ...'
+                  in line) or ('Computing stress (Cartesian axis) and pressure' in line):
                 try:
                     stress = []
-                    for k in range(10 + 5 * vdw_correction):
+                    count2 = None
+                    for k in range(15):  # Up to 15 lines later - more than 10 are needed if vdW is turned on
                         if 'P=' in data_step[count + k + 1]:
                             count2 = count + k + 1
-                    if '(Ry/bohr**3)' not in data_step[count2]:
-                        raise QEOutputParsingError('Error while parsing stress: unexpected units.')
-                    for k in range(3):
-                        line2 = data_step[count2 + k + 1].split()
-                        vec = [float(s) * 10**(-9) * ry_si / (bohr_si)**3 for s in line2[0:3]]
-                        stress.append(vec)
-                    trajectory_data.setdefault('stress', []).append(stress)
-                    parsed_data['stress' + units_suffix] = default_stress_units
+                    if count2 is None:
+                        logs.warning.append(
+                            'Error while parsing stress tensor: '
+                            '"P=" not found within 15 lines from the start of the stress block'
+                        )
+                    else:
+                        if '(Ry/bohr**3)' not in data_step[count2]:
+                            raise QEOutputParsingError('Error while parsing stress: unexpected units.')
+                        for k in range(3):
+                            line2 = data_step[count2 + k + 1].split()
+                            vec = [float(s) * 10**(-9) * CONSTANTS.ry_si / (CONSTANTS.bohr_si)**3 for s in line2[0:3]]
+                            stress.append(vec)
+                        trajectory_data.setdefault('stress', []).append(stress)
+                        parsed_data['stress' + units_suffix] = default_stress_units
                 except Exception:
-                    logs.warning.append('Error while parsing stress tensor.')
+                    import traceback
+                    logs.warning.append(f'Error while parsing stress tensor: {traceback.format_exc()}')
 
             # Electronic and ionic dipoles when 'lelfield' was set to True in input parameters
             elif lelfield is True:
@@ -856,7 +858,9 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
     if 'scf_accuracy' in trajectory_data:
         if 'scf_iterations' in trajectory_data:
             if len(trajectory_data['scf_accuracy']) != sum(trajectory_data['scf_iterations']):
-                logs.warning.append('the length of scf_accuracy does not match the sum of the elements of scf_iterations.')
+                logs.warning.append(
+                    'the length of scf_accuracy does not match the sum of the elements of scf_iterations.'
+                )
         else:
             logs.warning.append('"the scf_accuracy array was parsed but the scf_iterations was not.')
 
@@ -877,9 +881,7 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
                 occupations = values[1].split()
 
                 if len(occupations) == 1:
-                    atomic_occupations[atomic_index] = {
-                        'total': occupations[0]
-                    }
+                    atomic_occupations[atomic_index] = {'total': occupations[0]}
                 elif len(occupations) == 3:
                     atomic_occupations[atomic_index] = {
                         'up': occupations[0],
@@ -913,65 +915,6 @@ def parse_stdout(stdout, input_parameters, parser_options=None, parsed_xml=None)
 
 def grep_energy_from_line(line):
     try:
-        return float(line.split('=')[1].split('Ry')[0]) * ry_to_ev
+        return float(line.split('=')[1].split('Ry')[0]) * CONSTANTS.ry_to_ev
     except Exception:
         raise QEOutputParsingError('Error while parsing energy')
-
-
-def convert_qe_time_to_sec(timestr):
-    """Given the walltime string of Quantum Espresso, converts it in a number of seconds (float)."""
-    rest = timestr.strip()
-
-    if 'd' in rest:
-        days, rest = rest.split('d')
-    else:
-        days = '0'
-
-    if 'h' in rest:
-        hours, rest = rest.split('h')
-    else:
-        hours = '0'
-
-    if 'm' in rest:
-        minutes, rest = rest.split('m')
-    else:
-        minutes = '0'
-
-    if 's' in rest:
-        seconds, rest = rest.split('s')
-    else:
-        seconds = '0.'
-
-    if rest.strip():
-        raise ValueError("Something remained at the end of the string '{}': '{}'".format(timestr, rest))
-
-    num_seconds = (float(seconds) + float(minutes) * 60. + float(hours) * 3600. + float(days) * 86400.)
-
-    return num_seconds
-
-
-def parse_QE_errors(lines, line_number_start, warnings):
-    """Parse QE errors messages (those appearing between some lines with ``%%%%%%%%``)
-
-    :param lines: list of strings, the output text file as read by ``readlines()``
-        or as obtained by ``data.split('\\\\n')`` when data is the text file read by ``read()``
-    :param line_number_start: the line at which we identified some ``%%%%%%%%``
-    :param warnings: dictionary where keys are error markers and the value the corresponding warning messages that
-        should be returned.
-    :return messages: a list of QE error messages
-    """
-    messages = []
-
-    for line_number, line in enumerate(lines[line_number_start + 1:]):
-        if '%%%%%%%%%%%%' in line:
-            line_number_end = line_number
-            break
-    else:
-        return messages
-
-    for line in lines[line_number_start:line_number_end]:
-        for marker, message in warnings.items():
-            if marker in line:
-                messages.append(message)
-
-    return set(messages)
