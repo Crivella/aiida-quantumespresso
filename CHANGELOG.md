@@ -1,3 +1,74 @@
+## v3.5.2
+
+### New
+
+- `PwParser`: Add support for QE v7.0 [[#774]](https://github.com/aiidateam/aiida-quantumespresso/pull/774)
+
+### Bug Fixes
+
+- Fix XML parsing for structures with numbered kinds [[#770]](https://github.com/aiidateam/aiida-quantumespresso/pull/770)
+
+### Documentation
+
+- Update pw_tutorial.rst [[#769]](https://github.com/aiidateam/aiida-quantumespresso/pull/769)
+
+### Devops
+
+- Add GitHub Actions workflow for continuous deployment [[#776]](https://github.com/aiidateam/aiida-quantumespresso/pull/776)
+- Adopt PEP 621 and move build spec to pyproject.toml [[#779]](https://github.com/aiidateam/aiida-quantumespresso/pull/779)
+- CI: update the GHA ci.yml workflow [[#780]](https://github.com/aiidateam/aiida-quantumespresso/pull/780)
+- Update pre-commit dependencies and configuration [[#781]](https://github.com/aiidateam/aiida-quantumespresso/pull/781)
+- CI: add the isort pre-commit hook [[#781]](https://github.com/aiidateam/aiida-quantumespresso/pull/781)
+
+## v3.5.1
+
+### Improvements
+- `PhBaseWorkChain`: add handler for diagonalization errors [[#757]](https://github.com/aiidateam/aiida-quantumespresso/pull/757)
+- `PhBaseWorkChain`: add handler for `ERROR_SCHEDULER_OUT_OF_WALLTIME` [[#754]](https://github.com/aiidateam/aiida-quantumespresso/pull/754)
+
+### Documentation
+- Fix "suggest edit" link [[#768]](https://github.com/aiidateam/aiida-quantumespresso/pull/768)
+
+### Packaging
+- Add `calculations/helpers/*.xml` to `MANIFEST.in` [[#760]](https://github.com/aiidateam/aiida-quantumespresso/pull/760)
+
+
+## v3.5.0
+
+In this minor version release we provide support for Quantum ESPRESSO v6.8 and add several improvements and bug fixes mostly related to input overrides and restarting calculations.
+Another important addition is the introduction of [a compatibility policy for Quantum ESPRESSO](https://github.com/aiidateam/aiida-quantumespresso/blob/develop/README.md#compatibility-matrix), which will go into effect starting v4.0.0.
+
+### New
+
+- `PwParser`: add support for QE v6.8 with new XML schema file [[#717]](https://github.com/aiidateam/aiida-quantumespresso/pull/717)
+- `PwBaseWorkChain`: handle diagonalization issues [[#744]](https://github.com/aiidateam/aiida-quantumespresso/pull/744)
+
+### Improvements
+
+- `PwBaseWorkChain`: add handler for intentional non-convergence [[#695]](https://github.com/aiidateam/aiida-quantumespresso/pull/695)
+- `PwBaseWorkChain`: make magnetism from `overrides` absolute [[#731]](https://github.com/aiidateam/aiida-quantumespresso/pull/731)
+- `PwBaseWorkChain`: Improve restart and validate inputs [[#722]](https://github.com/aiidateam/aiida-quantumespresso/pull/722)
+- `PwRelaxWorkChain`: do not override SYSTEM/nbnd in final scf if set. [[#708]](https://github.com/aiidateam/aiida-quantumespresso/pull/708)
+- `PwCalculation`: adjust parent_folder validation [[#741]](https://github.com/aiidateam/aiida-quantumespresso/pull/741)
+- `PwBaseWorkChain`: make overrides absolute [[#741]](https://github.com/aiidateam/aiida-quantumespresso/pull/741)
+- `projwfc.x`: parse from XML instead of parent calc [[#747]](https://github.com/aiidateam/aiida-quantumespresso/pull/747)
+
+### Bug Fixes
+
+- `PhCalculation`: use `verbosity` instead of `iverbosity` [[#633]](https://github.com/aiidateam/aiida-quantumespresso/pull/633)
+- Protocols: Add settings from `overrides` [[#725]](https://github.com/aiidateam/aiida-quantumespresso/pull/725)
+- `PhBaseWorkChain`: spec exposed outputs of incorrect process class [[#732]](https://github.com/aiidateam/aiida-quantumespresso/pull/732)
+
+### Dependencies
+
+- Temporarily set upper limit for `psycopg2` [[#707]](https://github.com/aiidateam/aiida-quantumespresso/pull/707)
+
+### Documentation
+
+- Docs: add compatibility policy for Quantum ESPRESSO [[#737]](https://github.com/aiidateam/aiida-quantumespresso/pull/737)
+- `README.md`: cleanup the syntax of compatibility matrix [[#738]](https://github.com/aiidateam/aiida-quantumespresso/pull/738)
+- `README.md`: add shields for Quantum ESPRESSO compatibility [[#739]](https://github.com/aiidateam/aiida-quantumespresso/pull/739)
+
 ## v3.4.2
 
 This patch release fixes several bugs in the protocols feature, adds support for the `CutoffsPseudoPotentialFamily` introduced in `aiida-pseudo==0.6.1` and adapts the `ProtocolMixin` class so it can also be used by other packages.

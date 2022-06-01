@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name
 """Tests for the `PpCalculation` class."""
-import pytest
-
 from aiida import orm
-from aiida.common import datastructures, AttributeDict
+from aiida.common import AttributeDict, datastructures
+import pytest
 
 
 @pytest.fixture
@@ -23,9 +22,9 @@ def generate_inputs(fixture_localhost, fixture_sandbox, fixture_code, generate_r
             'parent_folder':
             generate_remote_data(fixture_localhost, fixture_sandbox.abspath, 'quantumespresso.pw'),
             'parameters':
-            orm.Dict(dict=parameters),
+            orm.Dict(parameters),
             'settings':
-            orm.Dict(dict=settings),
+            orm.Dict(settings),
             'metadata': {
                 'options': get_default_options()
             }

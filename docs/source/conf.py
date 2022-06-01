@@ -13,18 +13,15 @@
 # serve to show the default.
 import time
 
+# Load the dummy profile even if we are running locally, this way the documentation will succeed even if the current
+# default profile of the AiiDA installation does not use a Django backend.
+from aiida.manage.configuration import load_documentation_profile
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 import aiida_quantumespresso
 
-# ensure plugins are loaded
-from reentry import manager
-manager.scan()
-
-# Load the dummy profile even if we are running locally, this way the documentation will succeed even if the current
-# default profile of the AiiDA installation does not use a Django backend.
-from aiida.manage.configuration import load_documentation_profile
 load_documentation_profile()
 
 # -- Project information -----------------------------------------------------
@@ -96,7 +93,7 @@ html_theme_options = {
     'use_repository_button': True,
     'use_issues_button': True,
     'use_fullscreen_button': False,
-    'path_to_docs': 'docs',
+    'path_to_docs': 'docs/source',
     'use_edit_page_button': True,
     'extra_navbar': '<p>Made possible by the support of <a href="http://nccr-marvel.ch/" target="_blank"> NCCR MARVEL</a>, <a href="http://www.max-centre.eu/" target="_blank"> MaX CoE</a> and the <a href="https://www.materialscloud.org/swissuniversities" target="_blank"> swissuniversities P-5 project</a>.</p>'
 }

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tests for the `EpwCalculation` class."""
 from aiida import orm
-from aiida.plugins import CalculationFactory
 from aiida.common.links import LinkType
+from aiida.plugins import CalculationFactory
+
 from aiida_quantumespresso.utils.resources import get_default_options
 
 EPWCALC = CalculationFactory('quantumespresso.epw')
@@ -57,8 +58,8 @@ def test_epw_default(
         }
     }
 
-    parameters2 = orm.Dict(dict=qibz)
-    parameters2.add_incoming(parent_ph.creator, link_label='output_parameters', link_type=LinkType.CREATE)
+    parameters2 = orm.Dict(qibz)
+    parameters2.base.links.add_incoming(parent_ph.creator, link_label='output_parameters', link_type=LinkType.CREATE)
     parameters2.store()
 
     inputs = {
@@ -69,7 +70,7 @@ def test_epw_default(
         'kfpoints': generate_kpoints_mesh(2),
         'parent_folder_nscf': parent_pw,
         'parent_folder_ph': parent_ph,
-        'parameters': orm.Dict(dict=parameters),
+        'parameters': orm.Dict(parameters),
         'metadata': {
             'options': get_default_options()
         }

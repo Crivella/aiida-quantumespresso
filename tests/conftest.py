@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name,too-many-statements
 """Initialise a text database and profile for pytest."""
+from collections.abc import Mapping
 import io
 import os
 import shutil
 import tempfile
-
-from collections.abc import Mapping
 
 import pytest
 
@@ -78,10 +77,10 @@ def serialize_builder():
 
     def serialize_data(data):
         # pylint: disable=too-many-return-statements
-        from aiida.orm import BaseType, Dict, Code
+        from aiida.orm import BaseType, Code, Dict
         from aiida.plugins import DataFactory
 
-        StructureData = DataFactory('structure')
+        StructureData = DataFactory('core.structure')
         UpfData = DataFactory('pseudo.upf')
 
         if isinstance(data, dict):
@@ -239,15 +238,16 @@ def generate_calc_job_node(fixture_localhost):
 
         if filepath_folder:
             from qe_tools.exceptions import ParsingError
+
             from aiida_quantumespresso.tools.pwinputparser import PwInputFile
             try:
-                with open(filepath_input, 'r') as input_file:
+                with open(filepath_input, 'r', encoding='utf-8') as input_file:
                     parsed_input = PwInputFile(input_file.read())
             except (ParsingError, FileNotFoundError):
                 pass
             else:
                 inputs['structure'] = parsed_input.get_structuredata()
-                inputs['parameters'] = orm.Dict(dict=parsed_input.namelists)
+                inputs['parameters'] = orm.Dict(parsed_input.namelists)
 
         if inputs:
             metadata = inputs.pop('metadata', {})
@@ -258,7 +258,7 @@ def generate_calc_job_node(fixture_localhost):
 
             for link_label, input_node in flatten_inputs(inputs):
                 input_node.store()
-                node.add_incoming(input_node, link_type=LinkType.INPUT_CALC, link_label=link_label)
+                node.base.links.add_incoming(input_node, link_type=LinkType.INPUT_CALC, link_label=link_label)
 
         node.store()
 
@@ -282,11 +282,11 @@ def generate_calc_job_node(fixture_localhost):
                     except OSError:
                         pass  # To test the absence of files in the retrieve_temporary folder
 
-            retrieved.add_incoming(node, link_type=LinkType.CREATE, link_label='retrieved')
+            retrieved.base.links.add_incoming(node, link_type=LinkType.CREATE, link_label='retrieved')
             retrieved.store()
 
             remote_folder = orm.RemoteData(computer=computer, remote_path='/tmp')
-            remote_folder.add_incoming(node, link_type=LinkType.CREATE, link_label='remote_folder')
+            remote_folder.base.links.add_incoming(node, link_type=LinkType.CREATE, link_label='remote_folder')
             remote_folder.store()
 
         return node
@@ -393,7 +393,7 @@ def generate_remote_data():
         if entry_point_name is not None:
             creator = CalcJobNode(computer=computer, process_type=entry_point)
             creator.set_option('resources', {'num_machines': 1, 'num_mpiprocs_per_machine': 1})
-            remote.add_incoming(creator, link_type=LinkType.CREATE, link_label='remote_folder')
+            remote.base.links.add_incoming(creator, link_type=LinkType.CREATE, link_label='remote_folder')
             creator.store()
 
         return remote
@@ -407,9 +407,9 @@ def generate_bands_data():
 
     def _generate_bands_data():
         """Return a `BandsData` instance with some basic `kpoints` and `bands` arrays."""
-        import numpy
         from aiida.plugins import DataFactory
-        BandsData = DataFactory('array.bands')  #pylint: disable=invalid-name
+        import numpy
+        BandsData = DataFactory('core.array.bands')  #pylint: disable=invalid-name
         bands_data = BandsData()
 
         bands_data.set_kpoints(numpy.array([[0., 0., 0.], [0.625, 0.25, 0.625]]))
@@ -507,13 +507,14 @@ def generate_inputs_ph(fixture_sandbox, fixture_localhost, fixture_code, generat
     def _generate_inputs_ph():
         """Generate default inputs for a `PhCalculation."""
         from aiida.orm import Dict
+
         from aiida_quantumespresso.utils.resources import get_default_options
 
         inputs = {
             'code': fixture_code('quantumespresso.matdyn'),
             'parent_folder': generate_remote_data(fixture_localhost, fixture_sandbox.abspath, 'quantumespresso.pw'),
             'qpoints': generate_kpoints_mesh(2),
-            'parameters': Dict(dict={'INPUTPH': {}}),
+            'parameters': Dict({'INPUTPH': {}}),
             'metadata': {
                 'options': get_default_options()
             }
@@ -531,22 +532,21 @@ def generate_inputs_pw(fixture_code, generate_structure, generate_kpoints_mesh, 
     def _generate_inputs_pw():
         """Generate default inputs for a `PwCalculation."""
         from aiida.orm import Dict
+
         from aiida_quantumespresso.utils.resources import get_default_options
 
-        parameters = Dict(
-            dict={
-                'CONTROL': {
-                    'calculation': 'scf'
-                },
-                'SYSTEM': {
-                    'ecutrho': 240.0,
-                    'ecutwfc': 30.0
-                },
-                'ELECTRONS': {
-                    'electron_maxstep': 60,
-                }
+        parameters = Dict({
+            'CONTROL': {
+                'calculation': 'scf'
+            },
+            'SYSTEM': {
+                'ecutrho': 240.0,
+                'ecutwfc': 30.0
+            },
+            'ELECTRONS': {
+                'electron_maxstep': 60,
             }
-        )
+        })
         inputs = {
             'code': fixture_code('quantumespresso.pw'),
             'structure': generate_structure(),
@@ -571,12 +571,13 @@ def generate_inputs_cp(fixture_code, generate_structure, generate_upf_data):
     def _generate_inputs_cp(autopilot=False):
         """Generate default inputs for a CpCalculation."""
         from aiida.orm import Dict
+
         from aiida_quantumespresso.utils.resources import get_default_options
 
         inputs = {
             'code': fixture_code('quantumespresso.cp'),
             'structure': generate_structure(),
-            'parameters': Dict(dict={
+            'parameters': Dict({
                 'CONTROL': {
                     'calculation': 'cp'
                 },
@@ -593,19 +594,17 @@ def generate_inputs_cp(fixture_code, generate_structure, generate_upf_data):
             }
         }
         if autopilot:
-            inputs['settings'] = Dict(
-                dict={
-                    'AUTOPILOT': [{
-                        'onstep': 2,
-                        'what': 'dt',
-                        'newvalue': 42.0
-                    }, {
-                        'onstep': 3,
-                        'what': 'dt',
-                        'newvalue': 42.42
-                    }]
-                }
-            )
+            inputs['settings'] = Dict({
+                'AUTOPILOT': [{
+                    'onstep': 2,
+                    'what': 'dt',
+                    'newvalue': 42.0
+                }, {
+                    'onstep': 3,
+                    'what': 'dt',
+                    'newvalue': 42.42
+                }]
+            })
 
         return inputs
 
@@ -625,9 +624,9 @@ def generate_workchain_pw(generate_workchain, generate_inputs_pw, generate_calc_
         :param pw_outputs: ``dict`` of outputs for the ``PwCalculation``. The keys must correspond to the link labels
             and the values to the output nodes.
         """
-        from plumpy import ProcessState
         from aiida.common import LinkType
         from aiida.orm import Dict
+        from plumpy import ProcessState
 
         entry_point = 'quantumespresso.pw.base'
 
@@ -647,7 +646,7 @@ def generate_workchain_pw(generate_workchain, generate_inputs_pw, generate_calc_
 
         if pw_outputs is not None:
             for link_label, output_node in pw_outputs.items():
-                output_node.add_incoming(pw_node, link_type=LinkType.CREATE, link_label=link_label)
+                output_node.base.links.add_incoming(pw_node, link_type=LinkType.CREATE, link_label=link_label)
                 output_node.store()
 
         if exit_code is not None:
@@ -696,7 +695,8 @@ def generate_workchain_pdos(
     """Generate an instance of a `PdosWorkChain`."""
 
     def _generate_workchain_pdos():
-        from aiida.orm import Dict, Bool
+        from aiida.orm import Bool, Dict
+
         from aiida_quantumespresso.utils.resources import get_default_options
 
         entry_point = 'quantumespresso.pdos'
@@ -728,14 +728,14 @@ def generate_workchain_pdos(
         projwfc_params = {'PROJWFC': {'Emin': -10, 'Emax': 10, 'DeltaE': 0.01, 'ngauss': 0, 'degauss': 0.01}}
         dos = {
             'code': fixture_code('quantumespresso.dos'),
-            'parameters': Dict(dict=dos_params),
+            'parameters': Dict(dos_params),
             'metadata': {
                 'options': get_default_options()
             }
         }
         projwfc = {
             'code': fixture_code('quantumespresso.projwfc'),
-            'parameters': Dict(dict=projwfc_params),
+            'parameters': Dict(projwfc_params),
             'metadata': {
                 'options': get_default_options()
             }
