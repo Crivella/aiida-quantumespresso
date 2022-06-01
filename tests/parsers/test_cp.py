@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name
 """Tests for the `CpParser`."""
-import pytest
-
 from aiida import orm
 from aiida.common import AttributeDict
+import pytest
 
 
 @pytest.mark.parametrize('version', ['default', '6.6_autopilot', '6.6_verlet', '6.6_cgstep', '6.6_cgsteps'])
@@ -19,14 +18,14 @@ def test_cp_default(
         def generate_inputs():
             return AttributeDict({
                 'structure': generate_structure(structure_id='silicon'),
-                'parameters': orm.Dict(dict={}),
+                'parameters': orm.Dict({}),
             })
     else:
 
         def generate_inputs():
             return AttributeDict({
                 'structure': generate_structure(structure_id='water'),
-                'parameters': orm.Dict(dict={}),
+                'parameters': orm.Dict({}),
             })
 
     node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, version, generate_inputs())

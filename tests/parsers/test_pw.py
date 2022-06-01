@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=invalid-name,redefined-outer-name
+# pylint: disable=invalid-name,redefined-outer-name, too-many-lines
 """Tests for the `PwParser`."""
-import pytest
-
 from aiida import orm
 from aiida.common import AttributeDict
+import pytest
 
 
 @pytest.fixture
@@ -21,8 +20,8 @@ def generate_inputs(generate_structure):
         return AttributeDict({
             'structure': generate_structure(),
             'kpoints': kpoints,
-            'parameters': orm.Dict(dict=parameters),
-            'settings': orm.Dict(dict=settings),
+            'parameters': orm.Dict(parameters),
+            'settings': orm.Dict(settings),
             'metadata': metadata or {}
         })
 
@@ -93,105 +92,22 @@ def test_pw_default_no_xml(
     })
 
 
-def test_pw_default_xml_210716(
-    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, data_regression
+@pytest.mark.parametrize('xml_format', [
+    '190304',
+    '191206',
+    '200420',
+    '210716',
+    '211101',
+])
+def test_pw_default_xml(
+    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, data_regression, xml_format
 ):
-    """Test a `pw.x` calculation in `scf` mode that produced the XML output with schema of 210716.
+    """Test a `pw.x` calculation in `scf` mode that produced the XML output with the supported schemas.
 
     The output is created by running a dead simple SCF calculation for an aluminium structure. This test should test the
     standard parsing of the stdout content and XML file stored in the standard results node.
     """
-    name = 'default_xml_210716'
-    entry_point_calc_job = 'quantumespresso.pw'
-    entry_point_parser = 'quantumespresso.pw'
-
-    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, name, generate_inputs())
-    parser = generate_parser(entry_point_parser)
-    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
-
-    assert calcfunction.is_finished, calcfunction.exception
-    assert calcfunction.is_finished_ok, calcfunction.exit_message
-    assert not orm.Log.objects.get_logs_for(node), [log.message for log in orm.Log.objects.get_logs_for(node)]
-    assert 'output_band' in results
-    assert 'output_parameters' in results
-    assert 'output_trajectory' in results
-
-    data_regression.check({
-        'output_band': results['output_band'].attributes,
-        'output_parameters': results['output_parameters'].get_dict(),
-        'output_trajectory': results['output_trajectory'].attributes,
-    })
-
-
-def test_pw_default_xml_200420(
-    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, data_regression
-):
-    """Test a `pw.x` calculation in `scf` mode that produced the XML output with schema of 200420.
-
-    The output is created by running a dead simple SCF calculation for an aluminium structure. This test should test the
-    standard parsing of the stdout content and XML file stored in the standard results node.
-    """
-    name = 'default_xml_200420'
-    entry_point_calc_job = 'quantumespresso.pw'
-    entry_point_parser = 'quantumespresso.pw'
-
-    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, name, generate_inputs())
-    parser = generate_parser(entry_point_parser)
-    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
-
-    assert calcfunction.is_finished, calcfunction.exception
-    assert calcfunction.is_finished_ok, calcfunction.exit_message
-    assert not orm.Log.objects.get_logs_for(node), [log.message for log in orm.Log.objects.get_logs_for(node)]
-    assert 'output_band' in results
-    assert 'output_parameters' in results
-    assert 'output_trajectory' in results
-
-    data_regression.check({
-        'output_band': results['output_band'].attributes,
-        'output_parameters': results['output_parameters'].get_dict(),
-        'output_trajectory': results['output_trajectory'].attributes,
-    })
-
-
-def test_pw_default_xml_190304(
-    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, data_regression
-):
-    """Test a `pw.x` calculation in `scf` mode that produced the XML output with schema of 190304.
-
-    The output is created by running a dead simple SCF calculation for a silicon structure. This test should test the
-    standard parsing of the stdout content and XML file stored in the standard results node.
-    """
-    name = 'default_xml_190304'
-    entry_point_calc_job = 'quantumespresso.pw'
-    entry_point_parser = 'quantumespresso.pw'
-
-    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, name, generate_inputs())
-    parser = generate_parser(entry_point_parser)
-    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
-
-    assert calcfunction.is_finished, calcfunction.exception
-    assert calcfunction.is_finished_ok, calcfunction.exit_message
-    assert not orm.Log.objects.get_logs_for(node), [log.message for log in orm.Log.objects.get_logs_for(node)]
-    assert 'output_band' in results
-    assert 'output_parameters' in results
-    assert 'output_trajectory' in results
-
-    data_regression.check({
-        'output_band': results['output_band'].attributes,
-        'output_parameters': results['output_parameters'].get_dict(),
-        'output_trajectory': results['output_trajectory'].attributes,
-    })
-
-
-def test_pw_default_xml_191206(
-    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, data_regression
-):
-    """Test a `pw.x` calculation in `scf` mode that produced the XML output with schema of 191206.
-
-    The output is created by running a dead simple SCF calculation for an aluminium structure. This test should test the
-    standard parsing of the stdout content and XML file stored in the standard results node.
-    """
-    name = 'default_xml_191206'
+    name = f'default_xml_{xml_format}'
     entry_point_calc_job = 'quantumespresso.pw'
     entry_point_parser = 'quantumespresso.pw'
 
@@ -237,6 +153,41 @@ def test_pw_initialization_xml_new(
         'output_parameters': results['output_parameters'].get_dict(),
         'output_trajectory': results['output_trajectory'].attributes,
     })
+
+
+def test_pw_failed_base_exception(
+    fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs, monkeypatch
+):
+    """Test the parsing of a calculation where an unknown exception is raised.
+
+    This should return ``ERROR_UNEXPECTED_PARSER_EXCEPTION`` formatted with exception title.
+    """
+    from aiida_quantumespresso.parsers.parse_raw import pw
+
+    exception = 'the parser encountered an error.'
+
+    def parse_xml(*_, **__):
+        return {}, {}
+
+    def parse_stdout(*_, **__):
+        raise RuntimeError(exception)
+
+    name = 'failed_base_exception'
+    entry_point_calc_job = 'quantumespresso.pw'
+    entry_point_parser = 'quantumespresso.pw'
+
+    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, name, generate_inputs())
+    parser = generate_parser(entry_point_parser)
+
+    monkeypatch.setattr(pw, 'parse_stdout', parse_stdout)
+    monkeypatch.setattr(parser, 'parse_xml', parse_xml)
+
+    _, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    assert calcfunction.is_finished, calcfunction.exception
+    assert calcfunction.is_failed, calcfunction.exit_status
+    assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_UNEXPECTED_PARSER_EXCEPTION.status
+    assert exception in calcfunction.exit_message
 
 
 def test_pw_failed_computing_cholesky(fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs):
@@ -412,7 +363,7 @@ def test_pw_failed_interrupted_xml(
     data_regression.check(results['output_parameters'].get_dict())
 
 
-def test_pw_npools_too_high(fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs):
+def test_pw_npools_too_high_error(fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs):
     """Test the parsing of a calculation that failed because some nodes have no k-points.
 
     In this test the stdout is incomplete, and the XML is missing completely. The stdout contains
@@ -429,6 +380,26 @@ def test_pw_npools_too_high(fixture_localhost, generate_calc_job_node, generate_
     assert calcfunction.is_finished, calcfunction.exception
     assert calcfunction.is_failed, calcfunction.exit_status
     assert calcfunction.exit_status == node.process_class.exit_codes.ERROR_NPOOLS_TOO_HIGH.status
+
+
+def test_pw_npools_too_high_not_error(fixture_localhost, generate_calc_job_node, generate_parser, generate_inputs):
+    """Test the parsing of a success calculation that report 'some nodes have no k-points'.
+
+    For new QE version (test on v6.8) 'some nodes have no k-points' is not raised as an error and stop the
+    calculation. The output is different but still contain the same content, so instead of check content in
+    line use regex match.
+    """
+    name = 'finished_npools_too_high'
+    entry_point_calc_job = 'quantumespresso.pw'
+    entry_point_parser = 'quantumespresso.pw'
+
+    node = generate_calc_job_node(entry_point_calc_job, fixture_localhost, name, generate_inputs())
+    parser = generate_parser(entry_point_parser)
+    results, calcfunction = parser.parse_from_node(node, store_provenance=False)
+
+    assert calcfunction.is_finished, calcfunction.exception
+    assert calcfunction.is_finished_ok, calcfunction.exit_message
+    assert 'output_parameters' in results
 
 
 def test_tot_magnetization(
